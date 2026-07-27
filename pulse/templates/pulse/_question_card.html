@@ -5,14 +5,14 @@
         hx-target="#question-{{ question.id }}" hx-swap="outerHTML">
     {% csrf_token %}
     {% if question.type == "boolean" %}
-      <div class="choices">
-        <button name="answer" value="true">Ja</button>
-        <button name="answer" value="false" class="secondary">Nej</button>
+      <div class="choices choices--row">
+        <button class="choice" name="answer" value="true">Ja</button>
+        <button class="choice" name="answer" value="false">Nej</button>
       </div>
     {% elif question.type == "multiple_choice" %}
       <div class="choices">
         {% for option in question.options %}
-          <button name="answer" value="{{ option }}" class="secondary">{{ option }}</button>
+          <button class="choice" name="answer" value="{{ option }}"><span class="choice__dot"></span>{{ option }}</button>
         {% endfor %}
       </div>
     {% elif question.type == "number" %}

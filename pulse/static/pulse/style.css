@@ -173,11 +173,6 @@ legend {
   font-weight: 600;
   margin: 0 0 0.9rem;
 }
-.question-card .choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
 .question-card--answered {
   opacity: 0.6;
 }
@@ -185,6 +180,69 @@ legend {
   font-family: var(--font-body);
   font-weight: 500;
   margin: 0;
+}
+
+/* Answer choices ---------------------------------------------------------
+   Every option in a group is a genuine peer — nothing here is a "primary"
+   action the way Kom igång / Skicka förslag are, so choices deliberately
+   do NOT use .btn's solid-vs-secondary treatment (that pairing implies a
+   featured/default option, which biased Ja over Nej and made multi-choice
+   options read as muted/disabled rather than tappable). One equal style
+   for every option; the only thing that changes is the option's own label. */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.choices--row {
+  flex-direction: row;
+  gap: 0.7rem;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.85rem 1.05rem;
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: 0.7rem;
+  color: var(--cream);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
+}
+.choice:hover { border-color: var(--rose); background: var(--surface-2); }
+.choice:active { transform: scale(0.98); }
+.choices--row .choice { justify-content: center; text-align: center; flex: 1; }
+
+/* Radio-style dot on multi-choice rows (skipped for the compact Ja/Nej
+   row — a centered label is affordance enough at that size) — reinforces
+   "pick one from this list" and, while a tap is in flight, fills with the
+   same rose→gold gradient the big screen reveals with: the one moment the
+   guest's own tap visually becomes "the pulse". */
+.choice__dot {
+  flex: none;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  border: 2px solid var(--mist);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.choice:hover .choice__dot { border-color: var(--rose); }
+
+/* htmx adds .htmx-request to the form while its POST is in flight (forms
+   own the hx-post here, not the individual buttons) -- dim + freeze every
+   option in the group so a slow connection reads as "received", not
+   "nothing happened, tap again". */
+form.htmx-request .choice { opacity: 0.65; pointer-events: none; }
+form.htmx-request .choice__dot {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--rose), var(--gold));
 }
 
 .identity-btn {
