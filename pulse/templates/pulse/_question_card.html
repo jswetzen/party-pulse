@@ -3,6 +3,7 @@
   {% if error %}<p style="color:var(--rose)">{{ error }}</p>{% endif %}
   <form hx-post="{% url 'answer-question' respondent.id question.id %}"
         hx-target="#question-{{ question.id }}" hx-swap="outerHTML">
+    {% csrf_token %}
     {% if question.type == "boolean" %}
       <div class="choices">
         <button name="answer" value="true">Ja</button>
