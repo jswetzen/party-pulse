@@ -22,6 +22,16 @@ if not SECRET_KEY:
 
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h]
 
+# Deployed behind Traefik, which terminates TLS and forwards plain HTTP with
+# X-Forwarded-Proto: https. Without telling Django to trust that header,
+# request.is_secure() is False, so CsrfViewMiddleware computes an expected
+# Origin of http://<host> while the browser's real Origin/Referer is
+# https://<host> — every POST 403s with "CSRF verification failed", no
+# matter how correct the token itself is. Hit this for real on the first
+# production deploy (2026-07-27); see mikro-iac's PITFALLS.md.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_TRUSTED_ORIGINS = [f"https://{h}" for h in ALLOWED_HOSTS if h not in ("127.0.0.1", "localhost")]
+
 
 # Application definition
 
