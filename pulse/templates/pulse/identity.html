@@ -4,6 +4,7 @@
   <p class="wordmark">Party<span>Pulse</span></p>
   <h1>Vem är du ikväll?</h1>
 
+  <div id="stale-notice"></div>
   <div id="known-identities"></div>
 
   <fieldset>
@@ -79,6 +80,22 @@
       location.href = `/r/${data.id}/`;
     });
 
+    // The questionnaire view redirects here with ?stale=<uuid> when a stored respondent id no
+    // longer exists server-side (e.g. after a data reset) -- drop just that one entry so
+    // "Fortsätt som ..." doesn't lead back into the same dead end, without touching any other
+    // identity a shared device might have saved.
+    function dropStaleIdentity() {
+      const params = new URLSearchParams(location.search);
+      const staleId = params.get("stale");
+      if (!staleId) return;
+      const identities = loadIdentities().filter(i => i.id !== staleId);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(identities));
+      document.getElementById("stale-notice").innerHTML =
+        '<div class="card"><p style="margin:0">Din sparade profil hittades inte längre — skapa en ny nedan.</p></div>';
+      history.replaceState(null, "", location.pathname);
+    }
+
+    dropStaleIdentity();
     renderIdentities();
   </script>
 {% endblock %}

@@ -28,7 +28,14 @@ def create_identity(request):
 
 
 def questionnaire(request, respondent_id):
-    respondent = get_object_or_404(Respondent, id=respondent_id)
+    respondent = Respondent.objects.filter(id=respondent_id).first()
+    if respondent is None:
+        # The browser's localStorage still points at a respondent id that no longer exists
+        # server-side (e.g. the DB was reset between visits). A raw 404 is a dead end for a
+        # guest who did nothing wrong -- send them back to create a new identity, and tell the
+        # identity picker's JS which stale id to drop from localStorage so "Fortsätt som ..."
+        # doesn't just lead back here in a loop.
+        return redirect(f"/?stale={respondent_id}")
     answered_ids = Response.objects.filter(respondent=respondent).values_list("question_id", flat=True)
     questions = Question.objects.filter(status=Question.Status.LIVE).exclude(id__in=answered_ids)
     return render(
