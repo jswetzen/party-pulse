@@ -1,0 +1,11 @@
+<fieldset id="suggestion-form">
+  <legend>Föreslå en fråga</legend>
+  {% if submitted %}
+    <p style="margin:0">Tack! Värden tittar på ditt förslag.</p>
+  {% else %}
+    <form hx-post="{% url 'suggest-question' respondent.id %}" hx-target="#suggestion-form" hx-swap="outerHTML">
+      <textarea name="text_sv" rows="2" placeholder="T.ex. Vem dansar bäst?" required style="margin-bottom:0.8rem"></textarea>
+      <button type="submit">Skicka förslag</button>
+    </form>
+  {% endif %}
+</fieldset>

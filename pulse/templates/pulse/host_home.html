@@ -1,0 +1,31 @@
+{% extends "pulse/base.html" %}
+{% block title %}Värdpanel — Party Pulse{% endblock %}
+{% block content %}
+  <div class="host-page">
+    <p class="wordmark">Party<span>Pulse</span></p>
+    <h1>Värdpanel</h1>
+
+    <nav class="host-nav">
+      <a class="btn" href="{% url 'host-screen-control' %}">Storbildsstyrning</a>
+      <a class="btn secondary" href="/admin/pulse/question/">Frågehantering</a>
+      <a class="btn secondary" href="{% url 'host-logout' %}">Logga ut</a>
+    </nav>
+
+    <div class="card">
+      <p class="eyebrow">Live-frågor</p>
+      <h2 style="margin:0 0 0.5rem">{{ live_questions|length }}</h2>
+      <ul style="margin:0;padding-left:1.2rem">
+        {% for q in live_questions %}<li>{{ q.text_sv }}</li>{% endfor %}
+      </ul>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Väntande förslag</p>
+      <h2 style="margin:0 0 0.5rem">{{ pending_suggestions|length }}</h2>
+      <ul style="margin:0 0 0.8rem;padding-left:1.2rem">
+        {% for q in pending_suggestions %}<li>{{ q.text_sv }}</li>{% endfor %}
+      </ul>
+      <a class="btn secondary" href="/admin/pulse/question/?suggestion_review_status__exact=pending">Granska i admin</a>
+    </div>
+  </div>
+{% endblock %}

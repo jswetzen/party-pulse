@@ -1,0 +1,20 @@
+{% extends "pulse/base.html" %}
+{% block title %}Frågor — Party Pulse{% endblock %}
+{% block content %}
+  <p class="wordmark">Party<span>Pulse</span></p>
+  <h1>Frågor till dig</h1>
+
+  {% if not questions %}
+    <div class="card">
+      <p style="margin:0">Inga fler frågor just nu — kolla igen senare!</p>
+    </div>
+  {% endif %}
+
+  <div id="questions">
+    {% for question in questions %}
+      {% include "pulse/_question_card.html" %}
+    {% endfor %}
+  </div>
+
+  {% include "pulse/_suggestion_form.html" %}
+{% endblock %}

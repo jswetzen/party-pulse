@@ -1,0 +1,22 @@
+<div class="question-card" id="question-{{ question.id }}">
+  <p>{{ question.text_sv }}</p>
+  {% if error %}<p style="color:var(--rose)">{{ error }}</p>{% endif %}
+  <form hx-post="{% url 'answer-question' respondent.id question.id %}"
+        hx-target="#question-{{ question.id }}" hx-swap="outerHTML">
+    {% if question.type == "boolean" %}
+      <div class="choices">
+        <button name="answer" value="true">Ja</button>
+        <button name="answer" value="false" class="secondary">Nej</button>
+      </div>
+    {% elif question.type == "multiple_choice" %}
+      <div class="choices">
+        {% for option in question.options %}
+          <button name="answer" value="{{ option }}" class="secondary">{{ option }}</button>
+        {% endfor %}
+      </div>
+    {% elif question.type == "number" %}
+      <input type="number" name="answer" required>
+      <button type="submit" style="margin-top:0.7rem">Svara</button>
+    {% endif %}
+  </form>
+</div>

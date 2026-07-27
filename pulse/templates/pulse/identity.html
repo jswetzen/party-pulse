@@ -1,0 +1,84 @@
+{% extends "pulse/base.html" %}
+{% block title %}Party Pulse{% endblock %}
+{% block content %}
+  <p class="wordmark">Party<span>Pulse</span></p>
+  <h1>Vem är du ikväll?</h1>
+
+  <div id="known-identities"></div>
+
+  <fieldset>
+    <legend>Ny gäst</legend>
+    <form id="new-identity-form">
+      <label>Ditt namn (visas bara på den här telefonen)
+        <input type="text" id="alias" required>
+      </label>
+      <label>Ålder
+        <select name="age_bucket" required>
+          <option value="20s">20-talet</option>
+          <option value="30s">30-talet</option>
+          <option value="40s">40-talet</option>
+          <option value="50+">50 eller äldre</option>
+        </select>
+      </label>
+      <label>Kön
+        <select name="sex" required>
+          <option value="female">Kvinna</option>
+          <option value="male">Man</option>
+        </select>
+      </label>
+      <label>Sida
+        <select name="side" required>
+          <option value="bride">Brudens sida</option>
+          <option value="groom">Brudgummens sida</option>
+          <option value="both">Bådas sida</option>
+        </select>
+      </label>
+      <label>Relation
+        <select name="relation" required>
+          <option value="friend">Vän</option>
+          <option value="family">Familj</option>
+          <option value="plus_one">Plus one</option>
+        </select>
+      </label>
+      <button type="submit">Kom igång</button>
+    </form>
+  </fieldset>
+
+  <script>
+    const STORAGE_KEY = "partypulse_identities";
+
+    function loadIdentities() {
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+      catch { return []; }
+    }
+
+    function renderIdentities() {
+      const identities = loadIdentities();
+      const container = document.getElementById("known-identities");
+      if (identities.length === 0) { container.innerHTML = ""; return; }
+      container.innerHTML = '<p class="eyebrow">Fortsätt som</p>' + identities.map(i =>
+        `<button type="button" class="identity-btn" onclick="location.href='/r/${i.id}/'">${i.alias}</button>`
+      ).join("");
+    }
+
+    document.getElementById("new-identity-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const alias = document.getElementById("alias").value.trim();
+      const body = new URLSearchParams(new FormData(form));
+      const resp = await fetch("{% url 'create-identity' %}", {
+        method: "POST",
+        body,
+        headers: {"X-CSRFToken": "{{ csrf_token }}"},
+      });
+      if (!resp.ok) { alert("Något gick fel, försök igen."); return; }
+      const data = await resp.json();
+      const identities = loadIdentities();
+      identities.push({id: data.id, alias});
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(identities));
+      location.href = `/r/${data.id}/`;
+    });
+
+    renderIdentities();
+  </script>
+{% endblock %}

@@ -1,0 +1,204 @@
+# Party Pulse — plan
+
+A party app for a wedding reception. Guests answer a fun/quirky anonymous questionnaire tagged
+with light demographics; results are shown live on a big screen during the reception — either as
+raw statistics, or as a guessing game where the bride and groom guess stats about their guests
+before they're revealed.
+
+Self-hosted (podman on the owner's homelab), single-event use but built to not throw away
+afterward if it's fun.
+
+## Status (2026-07-27)
+
+MVP build steps 1-4 below are implemented and verified end-to-end (guest identity → answer →
+host reveal → big screen render), including a container build tested with `podman build` +
+`podman run`. Not yet built: step 5 (guessing-game mode is a selectable field in the host console
+and data model, but the big-screen template doesn't yet render it differently from statistics
+mode — see "Guessing game mode" below) and step 6 (suggestion review currently goes through the
+plain Django admin, not a dedicated host-console queue UI). 28 seed questions are written in
+`pulse/management/commands/seed_questions.py` (run `uv run python manage.py seed_questions`),
+covering all three question types.
+
+## Anonymity model
+
+"Party anonymous," not "research anonymous." No k-anonymity/cell-suppression enforcement in the
+app. Host is trusted to visually judge in real time whether a breakdown is too identifying and
+simply skip showing it.
+
+## Identity model
+
+No accounts/login. On first visit, the guest app generates an opaque device token in
+localStorage, mapping 1:1 to a `Respondent` server-side (implemented as: the Respondent's UUID
+primary key *is* the token). A single device can hold multiple tokens/respondents (for shared
+phones) — the guest creates a new identity with a locally-stored alias and switches between them.
+The alias is NEVER sent to the server — only the opaque token/respondent id is (see
+`pulse/templates/pulse/identity.html`'s inline JS). No live push notifications; new questions
+only appear when the guest manually reopens/refreshes.
+
+## Demographics
+
+Per respondent (fixed set, columns not EAV — don't over-engineer): age bucket (20s/30s/40s/50+),
+sex (male/female), side (bride's/groom's/both), relation (friend/family/plus-one). Required at
+first entry. See `Respondent` in `pulse/models.py`.
+
+## Question types
+
+All three from day one, generic engine not type-by-type special casing: Yes/No, Multiple choice
+(single-select, fixed options), Number (e.g. "how many countries have you visited?").
+
+## Generic stats engine
+
+Every response has a typed answer (boolean/selected option/number). Breakdown/aggregation logic
+is generic across types, parameterized by (question, grouping dimension, aggregation function) —
+see `pulse/aggregations.py`, covered by `pulse/tests/test_aggregations.py`:
+- Grouping dimension (host-chosen): overall, by sex, by age bucket, by side, by relation
+- Aggregation: Boolean → % yes per group. Multiple choice → % per option per group. Number → avg
+  (default) / median / min / max / count-above-threshold per group.
+
+New aggregations (histograms, "closest guess wins" leaderboards) can be added later without
+restructuring, since `_aggregate_group` is the only place that branches on question type.
+
+## Data model
+
+Implemented in `pulse/models.py`:
+
+- **Respondent**: id (uuid), age_bucket, sex, side, relation, created_at
+- **Question**: id, text_sv (Swedish), type (boolean|multiple_choice|number), options (json, for
+  multiple_choice), status (draft|live|archived), **order** (int — added during refinement; the
+  original idea's data model specified host-console "reorder" but had no field to reorder by),
+  source (host|guest_suggested), suggested_by_respondent (nullable), suggestion_review_status
+  (pending|promoted|archived, nullable), created_at
+- **Response**: id, respondent (fk), question (fk), answer (typed json), answered_at, unique
+  constraint (respondent, question)
+- **BigScreenState** (singleton, host-controlled, polled by the screen display): mode
+  (statistics|guessing_game), question (nullable), breakdown (overall|sex|age|side|relation),
+  aggregation (nullable, for number questions), aggregation_threshold, revealed (boolean)
+
+## Routes / apps (three front-ends, one shared backend)
+
+- **Guest app** (`/`, `/r/<uuid>/...`): identity picker (create new local identity with
+  demographics, or resume existing local alias); questionnaire showing only live questions the
+  current respondent hasn't answered; suggest-a-question free text (goes in as
+  guest_suggested/pending)
+- **Host console** (`/host/...`): login-gated (see "Host console auth" below); dashboard listing
+  live-question and pending-suggestion counts; big-screen control panel (pick question → mode →
+  breakdown [+ aggregation for number questions] → "show question" / "reveal" button); question
+  management and suggestion review happen in the Django admin (`/admin/pulse/question/`), which
+  the plan always intended to get "almost for free"
+- **Big screen display** (`/screen/`): full-screen, no interaction, polls
+  `/screen/state/` every 2s via htmx (`hx-trigger="every 2s"` — explicitly chosen over
+  websockets/SSE, "start simple with polling"), renders question first with no stats, then on
+  reveal shows the statistic per chosen breakdown/aggregation.
+
+## Reveal semantics
+
+Reveal always means "show the chosen statistic/breakdown" — NEVER an individual guest's identity
+or answer. Only aggregated group stats are ever shown (`pulse/aggregations.py` only ever returns
+grouped counts/percentages/aggregates, never a `Response` row).
+
+## Refinements made while scaffolding (gaps in the original idea)
+
+- **Host console auth**: the idea said "simple shared-password gated" without a mechanism.
+  Resolved by reusing Django's built-in auth (`django.contrib.auth`) with one shared operator
+  account (`manage.py createsuperuser`), `@login_required` on host views, `LOGIN_URL`/
+  `LOGIN_REDIRECT_URL` pointed at `/host/login/`. This also means the Django admin (question
+  manager, suggestion queue) shares the same login — one password for the host to remember.
+- **Big screen access**: left deliberately unauthenticated — it's read-only aggregates, never
+  individual answers, and gating it would just be friction for casting it to a TV. Relies on the
+  venue network being effectively private, same assumption the original idea made about hosting.
+- **Missing `order` field**: the host-console spec said "create/edit/**reorder**/status" but the
+  original data model draft had nothing to reorder by. Added `Question.order` (int), exposed as
+  `list_editable` in the admin.
+- **No CDN dependencies**: htmx is vendored into `pulse/static/pulse/vendor/htmx.min.js` rather
+  than loaded from a CDN. The idea's own "Hosting" section says "the real risk for the event is
+  venue network reliability, not the code" — pulling a JS framework from the internet at runtime
+  would directly contradict that.
+- **Env-based settings**: `SECRET_KEY`/`DEBUG`/`ALLOWED_HOSTS` read from env vars
+  (`DJANGO_SECRET_KEY`, `DJANGO_DEBUG`, `DJANGO_ALLOWED_HOSTS`), with a hard failure at startup
+  if `DJANGO_DEBUG` isn't `1` and no secret key is set — so a misconfigured production deploy
+  fails loudly at boot instead of silently running with Django's generated placeholder key. See
+  `.env.example`.
+- **Container default DB path**: found via an actual `podman build && podman run` smoke test —
+  without an explicit `DJANGO_DB_PATH`, sqlite tried to write `/app/db.sqlite3`, which isn't
+  writable by the non-root container user, and failed with an opaque `unable to open database
+  file` error. Fixed by baking `ENV DJANGO_DB_PATH=/data/db.sqlite3` into the image itself (see
+  `Dockerfile`) so forgetting to set it in the deployment config degrades to "works but doesn't
+  persist across a volume remount" instead of "container doesn't start."
+- **Testing**: the idea didn't mention a test strategy. Added `pytest`/`pytest-django` covering
+  `pulse/aggregations.py` — the one module with real logic (grouping + per-type aggregation
+  math) — since a wrong stat shown live on the big screen is the most visible possible bug.
+- **Suggestion review UX**: rather than building a bespoke review queue, suggestions submitted
+  via the guest app land as `Question(status=draft, suggestion_review_status=pending)` and are
+  reviewed/promoted from the Django admin's question list, filterable by
+  `suggestion_review_status`. Matches the plan's own framing that admin gives this "almost for
+  free."
+- **Visual design**: the idea's own text never specified a look — only "styling for projector
+  legibility" as a late polish step. Gave it a real, specific identity rather than default
+  framework styling: a warm dusk palette (deep ink, rose, champagne gold — the reception at
+  night, which is when every surface here is actually used), self-hosted Fraunces for headlines
+  and the big-screen reveal numbers (one variable-weight woff2, vendored for the same
+  no-runtime-CDN reason as htmx — `pulse/static/pulse/fonts/`), and a signature "pulse" waveform
+  motif (`pulse/templates/pulse/_pulse_line.html`) used as the big screen's idle/thinking state
+  and as the divider each reveal grows from. Verified in an actual browser (Playwright,
+  screenshots at each state), not just curl — which is how two real bugs surfaced that no
+  status-code check would have caught:
+  - `aggregations._group` was keying breakdown groups by the raw stored value (`"bride"`) instead
+    of the Swedish display label (`"Brudens sida"`) — the big screen was showing raw enum values
+    to guests. Fixed by grouping on `get_<field>_display()`.
+  - Django's Swedish locale renders `25.0` as `25,0` in templates. That's correct for the visible
+    percentage text, but the same interpolation was also used in raw `style="width:{{ pct }}%"` —
+    a comma there is invalid CSS, so every stat bar silently ignored its width and fell back to a
+    default, meaning **all bars rendered the same length regardless of the actual percentage**.
+    Fixed with `{% load l10n %}` + the `|unlocalize` filter specifically where a number crosses
+    into CSS/HTML-attribute context, while leaving the human-readable text correctly
+    comma-formatted.
+
+## Backlog / explicitly out of scope for now
+
+Guest upvoting on suggested questions; automatic "interesting" heuristic/highlighting (host
+manually picks what to show for now); statistics projections/trends over the evening; live push
+notifications; more demographic fields beyond the four listed (easy to add later, don't build a
+flexible EAV model preemptively); larger question bank and demographic field brainstorm beyond
+the 28 seeded questions (content work, not architecture).
+
+## Suggested build order (MVP first)
+
+1. ~~Data model + backend API~~ — done
+2. ~~Guest app identity + seeded questions~~ — done (28 questions via `seed_questions`)
+3. ~~Host console question manager (via admin) + big screen control panel~~ — done
+4. ~~Big screen display with polling, statistics mode only~~ — done
+5. **Guessing game mode** — `BigScreenState.mode` exists and is selectable in the host console,
+   but `pulse/templates/pulse/_screen_state.html` doesn't yet render it differently from
+   statistics mode (no "couple guesses first, then reveal" framing/UI). Next thing to build.
+6. Dedicated suggestion submission + review queue UI (currently: admin) — optional polish, admin
+   already covers the functional need
+7. Polish: styling pass for projector legibility beyond the current baseline CSS, verify Swedish
+   copy throughout
+
+## Tech stack decision
+
+Django + HTMX + SQLite, managed with `uv` (lockfile + container build both use it — see
+`pyproject.toml`/`uv.lock` and the multi-stage `Dockerfile`). Rationale: owner knows Django (won't
+personally read the code — Claude Code will build/maintain it, but Django familiarity de-risks
+review if needed); Django admin gives the host console's question manager and suggestion-review
+queue almost for free; HTMX avoids any Node/JS build step, sidestepping known pain running
+Next.js-style frontends in containers; polling is trivial via `hx-trigger="every 2s"` matching the
+"start simple with polling" decision; SQLite is sufficient at wedding-guest-list scale (Postgres a
+two-line swap later if needed); runs cleanly under podman as gunicorn + WSGI, nothing
+Django-specific fights container runtimes.
+
+Considered alternatives: FastAPI+Jinja2+HTMX (lighter but loses free Django admin), Node+SvelteKit
+(nicer big-screen animations but new ecosystem + still has a JS build step), plain static
+HTML+vanilla JS (zero framework risk but hand-rolled polling/state logic).
+
+## Hosting
+
+Self-hosted on the owner's Proxmox homelab via podman, following the same pattern as this
+household's other small apps (see `mikro-iac` repo's `docs/poc-lyrics.md` for the conventions
+this repo's `Dockerfile`/`.github/workflows/docker-build.yml` mirror: multi-stage Alpine build,
+`uv sync --frozen`, image published to `ghcr.io/jswetzen/party-pulse` on push to `main`, pulled
+by a deployment CT). Single small web app + SQLite on a mounted `/data` volume, no separate DB
+container needed. The mikro-iac side (terraform CT, Traefik route, secrets snippet) is a separate
+follow-up, not part of this repo.
+
+Entire guest-facing UI, host console, and question bank are in Swedish.

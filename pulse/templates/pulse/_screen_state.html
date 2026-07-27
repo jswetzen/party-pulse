@@ -1,0 +1,48 @@
+{% load l10n %}
+{% if not state.question %}
+  <p class="screen-word">Party<span>Pulse</span></p>
+  {% include "pulse/_pulse_line.html" with animated=True %}
+
+{% elif not state.revealed %}
+  <h1 class="screen-question">{{ state.question.text_sv }}</h1>
+  {% include "pulse/_pulse_line.html" with animated=True %}
+
+{% else %}
+  <h1 class="screen-question" style="font-size:clamp(1.4rem,2.6vw,2.2rem)">{{ state.question.text_sv }}</h1>
+  {% include "pulse/_pulse_line.html" %}
+
+  <div class="results">
+    {% for group_label, agg in breakdown.items %}
+      <div class="result-group">
+        <div class="result-group__label">{{ group_label }} <span class="result-count">· {{ agg.count }} svar</span></div>
+
+        {% if state.question.type == "boolean" %}
+          <div class="result-bar-row">
+            <div class="result-bar-track">
+              {% if agg.yes_pct != None %}
+                <div class="result-bar-fill" style="width:{{ agg.yes_pct|unlocalize }}%"></div>
+              {% endif %}
+            </div>
+            <div class="result-value">{{ agg.yes_pct|default:"–" }}%</div>
+          </div>
+
+        {% elif state.question.type == "multiple_choice" %}
+          {% for option, pct in agg.options_pct.items %}
+            <div class="result-bar-row">
+              <div class="result-bar-track">
+                <div class="result-bar-fill" style="width:{{ pct|unlocalize }}%"></div>
+              </div>
+              <div class="result-value">{{ pct }}%</div>
+            </div>
+            <div style="text-align:left;color:var(--mist);font-size:0.85rem;margin:-0.4rem 0 0.6rem">{{ option }}</div>
+          {% endfor %}
+
+        {% elif state.question.type == "number" %}
+          <div class="result-number">{{ agg.value|floatformat:1|default:"–" }}</div>
+        {% endif %}
+      </div>
+    {% empty %}
+      <p style="color:var(--mist)">Inga svar än.</p>
+    {% endfor %}
+  </div>
+{% endif %}

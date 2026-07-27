@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <title>Party Pulse</title>
+  <script src="{% static 'pulse/vendor/htmx.min.js' %}"></script>
+  <link rel="stylesheet" href="{% static 'pulse/style.css' %}">
+</head>
+<body>
+  <div id="screen-state" class="screen" hx-get="{% url 'screen-state' %}" hx-trigger="load, every 2s" hx-swap="innerHTML">
+    <p class="screen-word">Party<span>Pulse</span></p>
+    {% include "pulse/_pulse_line.html" with animated=True %}
+  </div>
+</body>
+</html>

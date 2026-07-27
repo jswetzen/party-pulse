@@ -1,0 +1,13 @@
+{% comment %}
+Signature motif: an EKG-style waveform for "Party Pulse" — a literal pulse.
+Used as an idle/ambient loop (waiting for guests, thinking before reveal)
+and, statically, as the baseline each stat bar grows from on reveal.
+Usage: {% include "pulse/_pulse_line.html" with animated=True %}
+{% endcomment %}
+<div class="pulse-line{% if animated %} pulse-line--animated{% endif %}" aria-hidden="true">
+  <svg viewBox="0 0 900 60" preserveAspectRatio="none" class="pulse-line__svg">
+    <path d="M0,30 L110,30 L130,12 L145,48 L160,8 L175,42 L190,30 L300,30
+             L410,30 L430,12 L445,48 L460,8 L475,42 L490,30 L600,30
+             L710,30 L730,12 L745,48 L760,8 L775,42 L790,30 L900,30" />
+  </svg>
+</div>

@@ -1,0 +1,15 @@
+{% load static %}<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Party Pulse{% endblock %}</title>
+  <script src="{% static 'pulse/vendor/htmx.min.js' %}"></script>
+  <link rel="stylesheet" href="{% static 'pulse/style.css' %}">
+</head>
+<body>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

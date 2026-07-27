@@ -1,0 +1,354 @@
+/* Party Pulse — design tokens
+   -----------------------------------------------------------------------
+   Palette: a wedding reception after dark — the room the big screen and
+   every phone actually get used in. Deep dusk ink, warm rose (alive, the
+   "pulse"), champagne gold (reveal, celebration). Committed dark-first
+   rather than split light/dark: every surface here is used at an evening
+   party, so hedging on a light theme wouldn't serve any real screen.
+   Type: Fraunces (self-hosted, one variable-weight file — see vendor
+   rationale below) carries the personality at headline size; everything
+   read up close (forms, buttons, body copy) stays on system-ui, which
+   needs no network trip and is plenty legible on a phone in someone's
+   hand. Signature: the pulse-line waveform (see _pulse_line.html) —
+   literally the product's name — used as the idle/thinking state on the
+   big screen and as the baseline every stat bar grows from on reveal. */
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 600 700;
+  font-display: swap;
+  src: url("fonts/fraunces-variable-latin.woff2") format("woff2");
+}
+
+:root {
+  --ink: #1b1730;
+  --surface: #2b2244;
+  --surface-2: #382c58;
+  --cream: #f6efe4;
+  --mist: #a89cc0;
+  --rose: #e15a7a;
+  --gold: #dba955;
+
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --radius: 0.9rem;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--cream);
+  background: var(--ink);
+  line-height: 1.5;
+}
+
+a { color: var(--gold); }
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 650;
+  line-height: 1.15;
+  margin: 0 0 0.6em;
+}
+
+.page {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 1.75rem 1.25rem 4rem;
+}
+
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1.5rem;
+  color: var(--cream);
+  text-decoration: none;
+}
+.wordmark span { color: var(--rose); }
+
+.eyebrow {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mist);
+  margin-bottom: 0.4rem;
+}
+
+/* Forms & controls -------------------------------------------------- */
+
+label {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--mist);
+  margin-bottom: 1rem;
+}
+
+input[type="text"], input[type="number"], input[type="password"], select, textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.65rem 0.8rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--cream);
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: 0.6rem;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+button, .btn, input[type="submit"] {
+  display: inline-block;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.7rem 1.1rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--rose);
+  background: var(--rose);
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.08s ease, background 0.15s ease;
+}
+button:hover, .btn:hover { background: #ea7391; }
+button:active { transform: translateY(1px); }
+
+button.secondary, .btn.secondary {
+  background: transparent;
+  color: var(--cream);
+  border-color: var(--surface-2);
+}
+button.secondary:hover { background: var(--surface); border-color: var(--mist); }
+
+fieldset {
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem 1.2rem;
+  margin: 0 0 1.25rem;
+}
+legend {
+  font-family: var(--font-display);
+  font-weight: 650;
+  padding: 0 0.4rem;
+}
+
+/* Cards --------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 0.9rem;
+}
+
+.question-card {
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-radius: var(--radius);
+  padding: 1.2rem 1.3rem;
+  margin-bottom: 1rem;
+}
+.question-card p:first-child {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 0.9rem;
+}
+.question-card .choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.question-card--answered {
+  opacity: 0.6;
+}
+.question-card--answered p {
+  font-family: var(--font-body);
+  font-weight: 500;
+  margin: 0;
+}
+
+.identity-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 0.55rem;
+  background: var(--surface);
+  border-color: var(--surface-2);
+  color: var(--cream);
+  font-weight: 500;
+}
+.identity-btn:hover { background: var(--surface-2); }
+
+/* Pulse-line signature -------------------------------------------------
+   A heartbeat waveform, tripled and looped: the idle/thinking state on
+   the big screen, and (statically) the baseline each reveal bar grows
+   from. Respects reduced-motion by simply not scrolling. */
+
+.pulse-line {
+  width: 100%;
+  overflow: hidden;
+  line-height: 0;
+  color: var(--rose);
+}
+.pulse-line__svg {
+  display: block;
+  width: 300%;
+  height: 2.5rem;
+}
+.pulse-line__svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .pulse-line--animated .pulse-line__svg {
+    animation: pulse-scroll 6s linear infinite;
+  }
+}
+@keyframes pulse-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-33.333%); }
+}
+
+/* Big screen ------------------------------------------------------------
+   Viewed from across a room, always dark. Fraunces carries the question
+   text and the reveal numbers; everything else stays quiet. */
+
+.screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 2.5rem;
+  padding: 4vw 6vw;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(225, 90, 122, 0.16), transparent 60%),
+    var(--ink);
+}
+
+.screen-word {
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 650;
+}
+.screen-word span { color: var(--rose); }
+
+.screen-question {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  font-weight: 650;
+  max-width: 46rem;
+  margin: 0;
+}
+
+.screen .pulse-line { max-width: 48rem; }
+
+.results {
+  width: min(56rem, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 1.6rem;
+}
+
+.result-group__label {
+  font-size: clamp(0.85rem, 1.3vw, 1.1rem);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--mist);
+  margin-bottom: 0.5rem;
+  text-align: left;
+}
+
+.result-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+.result-bar-row:last-child { margin-bottom: 0; }
+
+.result-bar-track {
+  flex: 1;
+  height: 1.6rem;
+  background: var(--surface);
+  border-radius: 999px;
+  overflow: hidden;
+  position: relative;
+}
+.result-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--rose), var(--gold));
+  transform-origin: left;
+  animation: grow-bar 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .result-bar-fill { animation: none; }
+}
+@keyframes grow-bar {
+  from { transform: scaleX(0); }
+}
+
+.result-value {
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: clamp(1.1rem, 2vw, 1.6rem);
+  color: var(--gold);
+  min-width: 4.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-number {
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: clamp(2.2rem, 6vw, 4rem);
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+
+.result-count {
+  font-size: 0.85rem;
+  color: var(--mist);
+}
+
+/* Host console ---------------------------------------------------------
+   Same palette, quieter: the host is operating this live, not admiring
+   it — clarity and speed over display-face flourish. */
+
+.host-page { max-width: 40rem; }
+.host-page h1 { font-size: 1.6rem; }
+.host-nav { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.host-status {
+  display: inline-block;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--mist);
+}
+.host-status--live { background: rgba(225, 90, 122, 0.2); color: var(--rose); }
