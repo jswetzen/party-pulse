@@ -10,14 +10,29 @@ afterward if it's fun.
 
 ## Status (2026-07-27)
 
-MVP build steps 1-4 below are implemented and verified end-to-end (guest identity → answer →
-host reveal → big screen render), including a container build tested with `podman build` +
-`podman run`. Not yet built: step 5 (guessing-game mode is a selectable field in the host console
-and data model, but the big-screen template doesn't yet render it differently from statistics
-mode — see "Guessing game mode" below) and step 6 (suggestion review currently goes through the
-plain Django admin, not a dedicated host-console queue UI). 28 seed questions are written in
-`pulse/management/commands/seed_questions.py` (run `uv run python manage.py seed_questions`),
-covering all three question types.
+**Deployed and live**: https://partypuls.mikro.swetzen.com (mikro-iac CT 123 — see that repo's
+`docs/party-pulse.md` for the deployment side; this doc stays scoped to the app itself). Host
+login: `johan` (password set directly on the CT, not in any config file). 39 questions are seeded
+(`pulse/management/commands/data/questions.json`, loaded via `manage.py seed_questions`) — a
+previous 28-question pass was revised for a dry (alcohol-free) reception and broadened beyond
+pure party logistics, see git history on that JSON file.
+
+MVP build steps 1-4 are implemented and verified end-to-end, including on the real deployment,
+not just locally. Several real bugs only surfaced once actually deployed/used for real (not just
+curled) — all fixed, see that repo's git log for the specifics: two separate CSRF issues (a
+reverse-proxy HTTPS/origin mismatch, and two htmx forms with no CSRF token at all — the second
+one silently broke the core "answer a question" flow with zero visible error), a stale-respondent
+localStorage recovery gap (404 dead end → now redirects to a friendly "create a new identity"
+screen), and a UI bug where the answer-choice buttons' primary/secondary styling implied one
+option was "featured" over equally-valid others (fixed with a dedicated equal-weight `.choice`
+component). The admin's question list also gained bulk actions (multi-select → make live/draft/
+archive) — originally only bulk-delete existed.
+
+Not yet built: step 5 (guessing-game mode is a selectable field in the host console and data
+model, but the big-screen template doesn't yet render it differently from statistics mode — see
+"Guessing game mode" below) and step 6 (suggestion review goes through the plain Django admin,
+which already gained the bulk-action treatment above — a dedicated host-console queue UI would
+be pure polish at this point, not a functional gap).
 
 ## Anonymity model
 
