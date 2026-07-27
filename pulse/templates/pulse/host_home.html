@@ -2,30 +2,48 @@
 {% block title %}Värdpanel — Party Pulse{% endblock %}
 {% block content %}
   <div class="host-page">
-    <p class="wordmark">Party<span>Pulse</span></p>
+    <div class="host-header">
+      <p class="wordmark">Party<span>Pulse</span></p>
+      <a class="host-logout" href="{% url 'host-logout' %}">Logga ut</a>
+    </div>
     <h1>Värdpanel</h1>
 
-    <nav class="host-nav">
-      <a class="btn" href="{% url 'host-screen-control' %}">Storbildsstyrning</a>
-      <a class="btn secondary" href="/admin/pulse/question/">Frågehantering</a>
-      <a class="btn secondary" href="{% url 'host-logout' %}">Logga ut</a>
-    </nav>
+    <div class="nav-grid">
+      <a class="nav-card" href="{% url 'host-screen-control' %}">
+        <div class="nav-card__title">Storbildsstyrning</div>
+        <div class="nav-card__desc">Välj fråga, visa den, avslöja resultatet på storbild</div>
+      </a>
+      <a class="nav-card" href="/admin/pulse/question/">
+        <div class="nav-card__title">Frågehantering</div>
+        <div class="nav-card__desc">Alla frågor — skapa, redigera, gör live/utkast/arkivera (markera flera och välj en åtgärd)</div>
+      </a>
+    </div>
 
     <div class="card">
       <p class="eyebrow">Live-frågor</p>
       <h2 style="margin:0 0 0.5rem">{{ live_questions|length }}</h2>
-      <ul style="margin:0;padding-left:1.2rem">
-        {% for q in live_questions %}<li>{{ q.text_sv }}</li>{% endfor %}
-      </ul>
+      {% if live_questions %}
+        <ul style="margin:0;padding-left:1.2rem">
+          {% for q in live_questions %}<li>{{ q.text_sv }}</li>{% endfor %}
+        </ul>
+      {% else %}
+        <p style="margin:0;color:var(--mist);font-size:0.9rem">
+          Inga live-frågor än — öppna Frågehantering ovan, markera frågor och välj "Gör live".
+        </p>
+      {% endif %}
     </div>
 
     <div class="card">
       <p class="eyebrow">Väntande förslag</p>
       <h2 style="margin:0 0 0.5rem">{{ pending_suggestions|length }}</h2>
-      <ul style="margin:0 0 0.8rem;padding-left:1.2rem">
-        {% for q in pending_suggestions %}<li>{{ q.text_sv }}</li>{% endfor %}
-      </ul>
-      <a class="btn secondary" href="/admin/pulse/question/?suggestion_review_status__exact=pending">Granska i admin</a>
+      {% if pending_suggestions %}
+        <ul style="margin:0 0 0.8rem;padding-left:1.2rem">
+          {% for q in pending_suggestions %}<li>{{ q.text_sv }}</li>{% endfor %}
+        </ul>
+        <a class="btn secondary" href="/admin/pulse/question/?suggestion_review_status__exact=pending">Granska väntande förslag i admin</a>
+      {% else %}
+        <p style="margin:0;color:var(--mist);font-size:0.9rem">Inga väntande gästförslag just nu.</p>
+      {% endif %}
     </div>
   </div>
 {% endblock %}

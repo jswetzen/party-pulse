@@ -341,8 +341,36 @@ legend {
    it — clarity and speed over display-face flourish. */
 
 .host-page { max-width: 40rem; }
-.host-page h1 { font-size: 1.6rem; }
-.host-nav { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.host-page h1 { font-size: 1.6rem; margin-bottom: 0.3rem; }
+.host-header { display: flex; justify-content: space-between; align-items: baseline; }
+.host-header .wordmark { margin: 0; }
+.host-logout { font-size: 0.85rem; color: var(--mist); }
+.host-logout:hover { color: var(--cream); }
+
+/* Nav cards: deliberately NOT a row of adjacent buttons -- an earlier version used one
+   solid .btn next to two .btn.secondary in a row, which visually read as a tab bar with a
+   selected/disabled state that didn't actually exist (every link here is always equally
+   clickable). Cards in a grid carry no such implication. */
+.nav-grid { display: grid; gap: 0.7rem; margin: 1.2rem 0 1.6rem; }
+.nav-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--surface-2);
+  border-left: 3px solid var(--rose);
+  border-radius: var(--radius);
+  padding: 1rem 1.2rem;
+  text-decoration: none;
+  color: var(--cream);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.nav-card:hover { border-color: var(--rose); background: var(--surface-2); }
+.nav-card__title {
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1.1rem;
+  color: var(--cream);
+}
+.nav-card__desc { font-size: 0.88rem; color: var(--mist); margin-top: 0.2rem; }
 .host-status {
   display: inline-block;
   font-size: 0.85rem;
