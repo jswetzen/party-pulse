@@ -451,6 +451,12 @@ form.htmx-request .choice__dot {
   color: var(--mist);
   margin: 0 0 1rem;
 }
+/* One of the three ranked lists ("Mest olika" / "Mest lika" / "Störst
+   procentskillnad", see pulse/suggestions.py) -- same card style throughout,
+   just under its own heading and separated with a bit of extra top margin so
+   the three panels read as distinct sections rather than one long list. */
+.suggestions__group { margin-top: 1.4rem; }
+.suggestions__group h3 { font-size: 1rem; margin-bottom: 0.2rem; }
 .suggestion-list {
   display: flex;
   flex-direction: column;

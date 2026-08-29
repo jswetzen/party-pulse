@@ -179,33 +179,53 @@ next to but visually separate from the existing screen-control form) surfaces au
 breakdowns to find something worth showing. Global scan, recomputed synchronously on every
 `screen_control` page load (`pulse/suggestions.py`'s `compute_suggestions()`) — no caching, no
 background job; confirmed cheap at this app's real scale (39 seeded questions x 4 breakdowns x a
-handful of groups each).
+handful of groups each, run twice per page load — once per scoring strategy, see below).
 
-Scoring is a pluggable strategy (`pulse/suggestions.py`'s `SCORING_STRATEGIES` registry) so a
-future simple "% gap" mode can be added later without restructuring. The live default,
-`"effect_size"`, is one function per question type (mirrors `aggregations._aggregate_group`'s
-"one function branching on type" pattern, not type-specific duplication):
-- Boolean: Cohen's h between the group's yes-fraction and the overall yes-fraction.
-- Multiple choice: total variation distance between the group's option distribution and the
-  overall distribution (bounded to [0, 1] regardless of option count, so it stays comparable
-  across questions).
-- Number: standardized mean difference — group mean minus overall mean, divided by the overall
-  population's stdev (`statistics.pstdev`, not sample stdev — PLAN.md's anonymity model treats the
-  guest list as the whole population, not a sample of a larger one).
+Three separate top-5 lists (`compute_suggestions()` returns a `SuggestionLists` with
+`most_different` / `most_similar` / `biggest_pct_gap`), not one combined ranking — refined from an
+earlier single-list version once it became clear a single top-10 let a handful of extreme findings
+crowd out the "uncanny similarity" ones. All three still carry `is_small_sample` (below
+`MIN_SAMPLE_SIZE = 5` responses; never excluded, this app's "party anonymous" model trusts the host
+to judge live, not the app to silently hide data) and still only pre-fill the screen_control form
+via `?question=&breakdown=` — see the click-through paragraph below, unchanged.
 
-A single list, ranked by |score| descending — not two separate "divergent" / "similar" lists, per
-the original decision that "uncanny similarity" is just the same score's low end. Groups below
-`MIN_SAMPLE_SIZE = 5` responses are never excluded (this app's "party anonymous" model trusts the
-host to judge live, not the app to silently hide data), only flagged `is_small_sample` for a
-caveat badge.
+Scoring is a pluggable strategy (`pulse/suggestions.py`'s `SCORING_STRATEGIES` registry), both
+slots now implemented, each one function per question type (mirrors
+`aggregations._aggregate_group`'s "one function branching on type" pattern, not type-specific
+duplication):
+
+- **`"effect_size"`** feeds "Mest olika" (top 5 by |score| descending) and "Mest lika" (bottom 5 by
+  |score|, i.e. closest to zero) — the *same* scored pool sliced from both ends in one
+  `_score_pool()` call, not two independent computations, per the original decision that "uncanny
+  similarity" is just this score's low end:
+  - Boolean: Cohen's h between the group's yes-fraction and the overall yes-fraction.
+  - Multiple choice: total variation distance between the group's option distribution and the
+    overall distribution (bounded to [0, 1] regardless of option count, so it stays comparable
+    across questions).
+  - Number: standardized mean difference — group mean minus overall mean, divided by the overall
+    population's stdev (`statistics.pstdev`, not sample stdev — PLAN.md's anonymity model treats
+    the guest list as the whole population, not a sample of a larger one).
+- **`"simple_pct_gap"`** feeds "Störst procentskillnad" (top 5 by |score| descending, its own
+  `_score_pool()` call — a different formula, not a re-slice of the effect_size pool): a
+  deliberately plain, non-normalized magnitude, for a host who'd rather eyeball a raw gap than
+  reason about Cohen's h:
+  - Boolean: `|group_yes_pct - overall_yes_pct|` in percentage points.
+  - Multiple choice: the single option with the largest `|group_option_pct - overall_option_pct|`
+    gap (the blurb names which option) — a per-option max, not the aggregate TVD above.
+  - Number: raw `group_mean - overall_mean`, signed, in the question's own units — no division by
+    stdev.
+
+  Mirrors effect_size's "nothing to compare" guards (skips a boolean/number question whose overall
+  is degenerate — 0%/100%, or zero spread — same as effect_size does) so both strategies agree on
+  which candidates are worth ranking at all, even though they score real candidates differently.
 
 Clicking a suggestion card links back to `screen_control` with `?question=&breakdown=` query
 params, which only pre-select those two fields in the form (`views.screen_control`'s
 `prefill_question_id`/`prefill_breakdown`) — it never writes to the `BigScreenState` singleton or
 reveals anything; the host still has to press "Visa fråga" / "Visa resultat" themselves, same as
-always. Covered by `pulse/tests/test_suggestions.py` (per-type scoring math, small-sample
-flagging, a genuinely extreme case and a genuinely similar case) and
-`pulse/tests/test_views.py` (prefill-without-persisting).
+always. Covered by `pulse/tests/test_suggestions.py` (per-type scoring math for both strategies,
+small-sample flagging flowing through all three lists, and that "Mest olika"/"Mest lika" are
+genuinely opposite tails of one pool) and `pulse/tests/test_views.py` (prefill-without-persisting).
 
 ## Backlog / explicitly out of scope for now
 
