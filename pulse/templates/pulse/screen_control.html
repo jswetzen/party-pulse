@@ -138,6 +138,83 @@
           <p class="suggestions__empty">Inga fynd än — kommer synas här när gäster har svarat på frågor.</p>
         {% endif %}
       </div>
+
+      <p class="suggestions__intro" style="margin-top:1.8rem">
+        Samma tre jämförelser, men grupp mot grupp direkt (t.ex. "kvinnor" mot "män") i
+        stället för mot helheten.
+      </p>
+
+      <div class="suggestions__group">
+        <h3>Mest olika, grupp mot grupp</h3>
+        <p class="suggestions__intro">De par av grupper vars svar avviker mest från varandra.</p>
+        {% if suggestions.most_different_pairwise %}
+          <div class="suggestion-list">
+            {% for s in suggestions.most_different_pairwise %}
+              <a class="suggestion-card" href="{% url 'host-screen-control' %}?question={{ s.question_id }}&breakdown={{ s.breakdown }}#screen-control-form">
+                <div class="suggestion-card__head">
+                  <span class="suggestion-card__question">{{ s.question_text }}</span>
+                  {% if s.is_small_sample %}<span class="badge badge--small-sample">Litet urval</span>{% endif %}
+                </div>
+                <div class="suggestion-card__meta">{{ s.breakdown_label }} · {{ s.group_a_label }} vs {{ s.group_b_label }}</div>
+                <p class="suggestion-card__blurb">{{ s.blurb }}</p>
+                <div class="suggestion-card__score">Avvikelse: {{ s.score_display }}</div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="suggestions__empty">Inga fynd än — kommer synas här när gäster har svarat på frågor.</p>
+        {% endif %}
+      </div>
+
+      <div class="suggestions__group">
+        <h3>Mest lika, grupp mot grupp</h3>
+        <p class="suggestions__intro">
+          De par av grupper vars svar stämmer bäst överens med varandra — samma poäng som
+          ovan, bara sett från andra hållet.
+        </p>
+        {% if suggestions.most_similar_pairwise %}
+          <div class="suggestion-list">
+            {% for s in suggestions.most_similar_pairwise %}
+              <a class="suggestion-card" href="{% url 'host-screen-control' %}?question={{ s.question_id }}&breakdown={{ s.breakdown }}#screen-control-form">
+                <div class="suggestion-card__head">
+                  <span class="suggestion-card__question">{{ s.question_text }}</span>
+                  {% if s.is_small_sample %}<span class="badge badge--small-sample">Litet urval</span>{% endif %}
+                </div>
+                <div class="suggestion-card__meta">{{ s.breakdown_label }} · {{ s.group_a_label }} vs {{ s.group_b_label }}</div>
+                <p class="suggestion-card__blurb">{{ s.blurb }}</p>
+                <div class="suggestion-card__score">Avvikelse: {{ s.score_display }}</div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="suggestions__empty">Inga fynd än — kommer synas här när gäster har svarat på frågor.</p>
+        {% endif %}
+      </div>
+
+      <div class="suggestions__group">
+        <h3>Störst procentskillnad, grupp mot grupp</h3>
+        <p class="suggestions__intro">
+          Samma enkla, oviktade procentenhets- eller enhetsskillnad som ovan, fast mellan
+          två grupper direkt i stället för mot helheten.
+        </p>
+        {% if suggestions.biggest_pct_gap_pairwise %}
+          <div class="suggestion-list">
+            {% for s in suggestions.biggest_pct_gap_pairwise %}
+              <a class="suggestion-card" href="{% url 'host-screen-control' %}?question={{ s.question_id }}&breakdown={{ s.breakdown }}#screen-control-form">
+                <div class="suggestion-card__head">
+                  <span class="suggestion-card__question">{{ s.question_text }}</span>
+                  {% if s.is_small_sample %}<span class="badge badge--small-sample">Litet urval</span>{% endif %}
+                </div>
+                <div class="suggestion-card__meta">{{ s.breakdown_label }} · {{ s.group_a_label }} vs {{ s.group_b_label }}</div>
+                <p class="suggestion-card__blurb">{{ s.blurb }}</p>
+                <div class="suggestion-card__score">Skillnad: {{ s.score_display }}</div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="suggestions__empty">Inga fynd än — kommer synas här när gäster har svarat på frågor.</p>
+        {% endif %}
+      </div>
     </section>
   </div>
 {% endblock %}

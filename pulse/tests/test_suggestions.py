@@ -19,9 +19,28 @@ def answer(question, value, **respondent_kwargs):
 
 
 def all_lists(suggestions):
-    """Flatten the three ranked lists for assertions that don't care which one a
-    suggestion landed in (e.g. "this question must never appear anywhere")."""
-    return suggestions.most_different + suggestions.most_similar + suggestions.biggest_pct_gap
+    """Flatten all six ranked lists (three vs-overall, three pairwise) for assertions that
+    don't care which one a suggestion landed in (e.g. "this question must never appear
+    anywhere"). Vs-overall (Suggestion) and pairwise (PairwiseSuggestion) entries are
+    different dataclasses, but both carry `question_id`, which is all these assertions
+    need."""
+    return (
+        suggestions.most_different
+        + suggestions.most_similar
+        + suggestions.biggest_pct_gap
+        + suggestions.most_different_pairwise
+        + suggestions.most_similar_pairwise
+        + suggestions.biggest_pct_gap_pairwise
+    )
+
+
+def pairwise_by_pair(pairwise_list, breakdown):
+    """{frozenset({a, b}): suggestion} for a pairwise list, filtered to one breakdown --
+    frozenset so a test can look a pair up regardless of which side _score_pool happened to
+    put first (see suggestions.py's itertools.combinations order, which is incidental)."""
+    return {
+        frozenset({s.group_a_label, s.group_b_label}): s for s in pairwise_list if s.breakdown == breakdown
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -329,3 +348,195 @@ def test_compute_suggestions_respects_top_n_per_list():
     assert len(suggestions.most_different) == 5
     assert len(suggestions.most_similar) == 5
     assert len(suggestions.biggest_pct_gap) == 5
+
+
+# ---------------------------------------------------------------------------
+# Pairwise (group vs. group) comparisons -- generalizing beyond group-vs-overall
+# (PLAN.md "Interesting stats suggestions", 2026-08-29 design call: these are three
+# ADDITIONAL lists, not a replacement for the vs-overall ones above -- see module
+# docstring). Same scoring strategies, same MIN_SAMPLE_SIZE flagging, just a second
+# group instead of the overall pool as the comparison side.
+# ---------------------------------------------------------------------------
+
+
+def test_boolean_pairwise_extreme_divergence_scores_highly_and_is_not_flagged_small_sample():
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    for _ in range(6):
+        answer(question, True, side="bride")
+    for _ in range(6):
+        answer(question, False, side="groom")
+
+    suggestions = compute_suggestions()
+    pair = pairwise_by_pair(suggestions.most_different_pairwise, BigScreenState.Breakdown.SIDE)[
+        frozenset({"Brudens sida", "Brudgummens sida"})
+    ]
+
+    # Cohen's h between two fully opposite proportions (100% vs 0%) is
+    # 2*asin(1) - 2*asin(0) = pi -- the maximum possible magnitude, and bigger than this
+    # same fixture's vs-overall score of +-pi/2 (each side compared to a 50% overall
+    # instead of directly to each other).
+    assert abs(pair.score) == pytest.approx(math.pi)
+    assert pair.is_small_sample is False
+    assert {pair.sample_size_a, pair.sample_size_b} == {6, 6}
+    assert {pair.group_a_label, pair.group_b_label} == {"Brudens sida", "Brudgummens sida"}
+
+
+def test_boolean_pairwise_small_sample_flagged_when_either_side_is_small():
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    for _ in range(2):
+        answer(question, True, side="groom")  # below MIN_SAMPLE_SIZE
+    for _ in range(6):
+        answer(question, False, side="bride")
+
+    suggestions = compute_suggestions()
+    pair = pairwise_by_pair(
+        suggestions.most_different_pairwise + suggestions.most_similar_pairwise, BigScreenState.Breakdown.SIDE
+    )[frozenset({"Brudens sida", "Brudgummens sida"})]
+
+    # Flagged even though only ONE of the two sides (groom's, 2 responses) is below
+    # MIN_SAMPLE_SIZE -- the other side (bride's, 6) is well above it. Small-sample
+    # flagging must apply per-group on both sides of a pairwise comparison, not require
+    # both (or only check a fixed side).
+    assert {pair.sample_size_a, pair.sample_size_b} == {2, 6}
+    assert pair.is_small_sample is True
+
+
+def test_multiple_choice_pairwise_extreme_divergence():
+    question = Question.objects.create(
+        text_sv="Favoritdryck?", type=Question.Type.MULTIPLE_CHOICE, options=["Vin", "Öl", "Läsk"], status="live"
+    )
+    for _ in range(6):
+        answer(question, "Vin", side="bride")
+    for _ in range(6):
+        answer(question, "Öl", side="groom")
+
+    suggestions = compute_suggestions()
+    pair = pairwise_by_pair(suggestions.most_different_pairwise, BigScreenState.Breakdown.SIDE)[
+        frozenset({"Brudens sida", "Brudgummens sida"})
+    ]
+
+    # Bride's side is 100% Vin, groom's is 100% Öl -> TVD = 0.5*(1 + 1) = 1.0, the maximum
+    # possible -- bigger than this fixture's vs-overall TVD of 0.5 (each side compared to a
+    # 50/50 overall instead of directly to each other).
+    assert pair.score == pytest.approx(1.0)
+    assert "Vin" in pair.blurb or "Öl" in pair.blurb
+    assert pair.is_small_sample is False
+
+
+def test_number_pairwise_extreme_divergence_uses_pooled_variance():
+    question = Question.objects.create(text_sv="Hur många länder?", type=Question.Type.NUMBER, status="live")
+    for v in (8, 9, 10, 11, 12):
+        answer(question, v, side="bride")
+    for v in (-2, -1, 0, 1, 2):
+        answer(question, v, side="groom")
+
+    suggestions = compute_suggestions()
+    pair = pairwise_by_pair(suggestions.most_different_pairwise, BigScreenState.Breakdown.SIDE)[
+        frozenset({"Brudens sida", "Brudgummens sida"})
+    ]
+
+    # Both groups have the same population variance (2) and mean gap 10 -> pooled variance
+    # is also 2 (equal-sized groups), so the standardized difference is 10/sqrt(2) --
+    # deliberately NOT divided by either side's own stdev alone (see _number_effect_size's
+    # docstring: that would make |score| depend on which side landed in values_b).
+    assert abs(pair.score) == pytest.approx(10 / math.sqrt(2))
+    assert pair.is_small_sample is False
+
+
+def test_number_pairwise_with_no_internal_spread_in_either_group_produces_no_finding():
+    # Known/documented limitation of the pooled-variance denominator (see
+    # _number_effect_size's docstring): two groups that are each internally uniform (no
+    # spread of their own) have a pooled variance of exactly 0 even when their means are
+    # wildly different, so there's nothing to standardize by and the pair is skipped
+    # entirely for "effect_size" -- unlike the vs-overall case, which never hits this
+    # because the *overall* pool (bride+groom mixed) does have spread even when each side
+    # alone doesn't.
+    question = Question.objects.create(text_sv="Hur många länder?", type=Question.Type.NUMBER, status="live")
+    for _ in range(6):
+        answer(question, 10, side="bride")
+    for _ in range(6):
+        answer(question, 0, side="groom")
+
+    suggestions = compute_suggestions()
+    pairs = pairwise_by_pair(
+        suggestions.most_different_pairwise + suggestions.most_similar_pairwise, BigScreenState.Breakdown.SIDE
+    )
+
+    assert frozenset({"Brudens sida", "Brudgummens sida"}) not in pairs
+    # The vs-overall finding for the very same data is NOT similarly skipped -- confirms
+    # this is a pairwise-specific denominator limitation, not a question-level guard.
+    by_group = {s.group_label: s for s in suggestions.most_different if s.breakdown == BigScreenState.Breakdown.SIDE}
+    assert by_group["Brudens sida"].score == pytest.approx(1.0)
+
+
+def test_boolean_pct_gap_pairwise_is_a_plain_percentage_point_gap():
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    for _ in range(6):
+        answer(question, True, side="bride")
+    for _ in range(6):
+        answer(question, False, side="groom")
+
+    suggestions = compute_suggestions()
+    pair = pairwise_by_pair(suggestions.biggest_pct_gap_pairwise, BigScreenState.Breakdown.SIDE)[
+        frozenset({"Brudens sida", "Brudgummens sida"})
+    ]
+
+    # 100% yes vs 0% yes -> a plain 100 percentage point gap, unlike this fixture's
+    # vs-overall pct-gap of 50 (each side compared to a 50% overall).
+    assert pair.score == pytest.approx(100.0)
+    assert pair.score_display == "100,0 procentenheter"
+
+
+def test_number_pct_gap_pairwise_is_a_raw_signed_mean_difference():
+    question = Question.objects.create(text_sv="Hur många länder?", type=Question.Type.NUMBER, status="live")
+    for v in (10,) * 6:
+        answer(question, v, side="bride")
+    for v in (0,) * 6:
+        answer(question, v, side="groom")
+
+    suggestions = compute_suggestions()
+    pair = pairwise_by_pair(suggestions.biggest_pct_gap_pairwise, BigScreenState.Breakdown.SIDE)[
+        frozenset({"Brudens sida", "Brudgummens sida"})
+    ]
+
+    # Unlike the "effect_size" pairwise strategy (see the "no internal spread" test above),
+    # simple_pct_gap never divides by anything, so this uniform-within-each-group fixture
+    # (which produced NO effect_size pairwise finding) still produces a plain, well-defined
+    # raw mean difference of +-10 here.
+    assert abs(pair.score) == pytest.approx(10.0)
+
+
+def test_pairwise_lists_are_additive_not_a_replacement_for_vs_overall():
+    # Design call (PLAN.md, module docstring): pairwise findings are ADDED as new lists,
+    # the original three vs-overall lists still populate exactly as before for the same
+    # data.
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    for _ in range(6):
+        answer(question, True, side="bride")
+    for _ in range(6):
+        answer(question, False, side="groom")
+
+    suggestions = compute_suggestions()
+
+    assert any(s.question_id == question.id for s in suggestions.most_different)
+    assert any(s.question_id == question.id for s in suggestions.most_different_pairwise)
+
+
+def test_age_breakdown_pairwise_covers_every_unordered_pair_without_blowing_up():
+    # Age has more groups than sex/side/relation (up to 5 decade buckets), so pairwise
+    # combinations grow faster there -- C(5,2)=10 pairs instead of sex's single pair. This
+    # confirms every pair is actually produced (not silently truncated) and that the count
+    # matches C(n,2) exactly, not e.g. n^2 (which would double-count each pair, or wrongly
+    # include a group paired with itself).
+    question = Question.objects.create(text_sv="Hur många länder?", type=Question.Type.NUMBER, status="live")
+    ages = [15, 25, 35, 45, 55]  # one per decade bucket: Under 20 / 20-talet / .. / 50 eller äldre
+    for i, age in enumerate(ages):
+        for v in (i, i + 1, i + 2, i + 3, i + 4):  # 5 responses/group, real internal spread
+            answer(question, v, age=age)
+
+    suggestions = compute_suggestions(top_n=100)  # large enough to not truncate the pool
+    age_pairs = pairwise_by_pair(
+        suggestions.most_different_pairwise + suggestions.most_similar_pairwise, BigScreenState.Breakdown.AGE
+    )
+
+    assert len(age_pairs) == 10  # C(5, 2)

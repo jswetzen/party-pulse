@@ -227,6 +227,74 @@ always. Covered by `pulse/tests/test_suggestions.py` (per-type scoring math for 
 small-sample flagging flowing through all three lists, and that "Mest olika"/"Mest lika" are
 genuinely opposite tails of one pool) and `pulse/tests/test_views.py` (prefill-without-persisting).
 
+**Status (2026-08-29): shipped on `feature/age-as-number`** (commits `5e51989`, `cc4bde0`, not yet
+on `main` — pending Johan's review), demo-verified end to end via `pulse/management/commands/
+seed_demo_data.py` (a new, separate-from-`seed_questions` command: wipes and regenerates 150
+fake respondents + ~5,300 answers with a fixed seed, deliberately biasing a handful of
+question×breakdown pairs so all three lists have real signal to show, rather than pure noise).
+
+**Group-vs-group ("pairwise") comparisons, shipped 2026-08-29 (same day, follow-up commit)**:
+every score above was originally **group vs. the overall population average** only (e.g.
+"kvinnor" vs. everyone). Both `"effect_size"` and `"simple_pct_gap"` now also score every
+unordered pair of groups directly against each other within a breakdown (e.g. "kvinnor" vs
+"män" head-to-head), feeding three new lists — "Mest olika, grupp mot grupp" / "Mest lika,
+grupp mot grupp" / "Störst procentskillnad, grupp mot grupp" — alongside the original three
+on the host console.
+
+Design calls made:
+- **Additive, not a replacement or a 4th variant bolted onto each existing list.** The
+  original three vs-overall lists are unchanged; three new pairwise lists were added
+  (`SuggestionLists` grew from 3 fields to 6). Rejected folding pairwise findings into the
+  *same* ranked lists as vs-overall ones: a pairwise finding needs two group labels/sample
+  sizes where a vs-overall one needs one, so a shared list would either lose that
+  distinction in the UI or force the template to branch per-entry anyway — six clearly
+  labeled lists reads better than one ambiguous one.
+- **Scoring functions generalized, not duplicated.** Every per-type scoring function
+  (`_boolean_effect_size`, `_multiple_choice_effect_size`, `_number_effect_size`, and the
+  three `_pct_gap_*` siblings) now takes `(label_a, values_a, label_b, values_b)` instead of
+  `(group_label, overall_values, group_values)`. A vs-overall finding is produced by calling
+  the exact same functions with `label_b="totalt"`, `values_b=`the question's overall
+  values — there is no separate "pairwise" scoring codepath.
+- **Number's effect size needed one genuine formula change, not just a rename.** The
+  original standardized-mean-difference always divided by the *overall* population's stdev.
+  For a real (group_a, group_b) pair there's no single natural "the" population to divide
+  by any more, and dividing by one side's own stdev would make `|score|` — and therefore the
+  ranked position — depend on which group arbitrarily landed as "b" (see
+  `_score_pool`'s `itertools.combinations` order, which is incidental). Pairwise number
+  comparisons instead divide by a size-weighted **pooled population variance** across both
+  groups (Cohen's d's usual construction), which is symmetric under swapping a/b. Known
+  edge case: two groups that are each internally uniform (no spread of their own) have a
+  pooled variance of exactly 0 even with a huge mean gap between them, so that pair is
+  skipped for `"effect_size"` (still appears under `"simple_pct_gap"`, which never divides
+  by anything) — covered by
+  `test_number_pairwise_with_no_internal_spread_in_either_group_produces_no_finding`.
+- **The old per-group "nothing to compare" guards (boolean: overall is 0%/100%; number:
+  overall has zero spread) were hoisted to once-per-question**, not applied per pair. Every
+  group's (and every pair of groups') values are a subset of a question's overall values, so
+  if the overall pool has no variance, no group *or pair* drawn from it can differ either —
+  a property of the question as a whole, not of which one or two groups are being compared.
+  This also made the guard cheaper (one check per question instead of one per group).
+- **Small-sample flagging applies per-group on both sides.** `PairwiseSuggestion.is_small_sample`
+  is `True` if *either* group is below `MIN_SAMPLE_SIZE`, and the blurb/template show both
+  groups' sample sizes (not just one), covered by
+  `test_boolean_pairwise_small_sample_flagged_when_either_side_is_small`.
+- **No new database queries.** Pairwise reuses the exact same per-question `Response` query
+  and per-breakdown `aggregations._group()` result already computed for the vs-overall pool
+  — `_score_pool` now returns `(vs_overall_pool, pairwise_pool)` from one pass, and only adds
+  in-memory `itertools.combinations` arithmetic over groups already loaded. Age (up to 5
+  decade buckets) is the one breakdown where pair count grows meaningfully — C(5,2)=10 pairs
+  vs. sex's single pair — but that's still cheap per question at this app's scale.
+  Measured directly against `seed_demo_data`'s 39-question/150-respondent/~5,300-answer
+  dataset: `compute_suggestions()` took ~320-400ms before this change and ~345-355ms after
+  (5-run min: 317ms → 343ms), i.e. no perceptible page-load slowdown, not just a theoretical
+  argument.
+
+Covered by 9 new tests in `pulse/tests/test_suggestions.py` (24 total now, one per question type's
+pairwise effect_size/simple_pct_gap math, the pooled-variance edge case, small-sample
+flagging on either side, that pairwise lists are additive alongside the original three, and
+that age's breakdown produces exactly C(5,2)=10 pairs without truncation or blowup) plus all
+pre-existing vs-overall tests passing unchanged.
+
 ## Backlog / explicitly out of scope for now
 
 Guest upvoting on suggested questions; statistics projections/trends over the evening; live push
