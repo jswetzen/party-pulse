@@ -59,6 +59,20 @@ def test_age_bucket_label_boundaries(age, expected_label):
     assert age_bucket_label(age) == expected_label
 
 
+def test_age_breakdown_iterates_in_chronological_not_lexicographic_order():
+    # Plain lexicographic sort puts "Under 20" after "50 eller äldre" ('U' > '5' in
+    # codepoint order) -- compute_breakdown must instead order AGE groups by decade so
+    # the big screen doesn't render buckets in a nonsense sequence. Response order is
+    # deliberately scrambled here so a passing test can't be an accident of insertion order.
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    for age in (45, 15, 55, 35, 25):
+        Response.objects.create(respondent=make_respondent(age=age), question=question, answer={"value": True})
+
+    result = compute_breakdown(question, BigScreenState.Breakdown.AGE)
+
+    assert list(result.keys()) == ["Under 20", "20-talet", "30-talet", "40-talet", "50 eller äldre"]
+
+
 def test_boolean_grouped_by_side():
     question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
     Response.objects.create(respondent=make_respondent(side="bride"), question=question, answer={"value": True})

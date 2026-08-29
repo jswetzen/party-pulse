@@ -61,7 +61,10 @@ def questionnaire(request, respondent_id):
 @require_POST
 def answer_question(request, respondent_id, question_id):
     respondent = get_object_or_404(Respondent, id=respondent_id)
-    question = get_object_or_404(Question, id=question_id, status=Question.Status.LIVE)
+    # is_system=False here for the same reason as questionnaire()'s filter above: without it a
+    # guest could POST straight to the system age question's id and overwrite its
+    # auto-recorded Response (normally only ever written by create_identity()).
+    question = get_object_or_404(Question, id=question_id, status=Question.Status.LIVE, is_system=False)
 
     value = _parse_answer(question, request.POST)
     if value is None:

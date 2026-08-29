@@ -2,6 +2,41 @@ from django.contrib import admin
 
 from .models import BigScreenState, Question, Respondent, Response
 
+# (bucket_value, display_label) pairs matching the boundaries in Respondent.age_bucket_label()
+# (pulse/models.py) -- kept as an explicit range table here rather than importing that function,
+# since a SimpleListFilter needs both the lookup value and a queryset-filterable (min, max) range
+# per bucket, not just a label.
+_AGE_BUCKET_RANGES = [
+    ("under_20", "Under 20", (None, 20)),
+    ("20s", "20-talet", (20, 30)),
+    ("30s", "30-talet", (30, 40)),
+    ("40s", "40-talet", (40, 50)),
+    ("50_plus", "50 eller äldre", (50, None)),
+]
+
+
+class AgeBucketFilter(admin.SimpleListFilter):
+    # Filters on the real `age` field by the same decade boundaries age_bucket_label() uses
+    # for display -- restores the admin filtering the stale "same as before" comment promised,
+    # now that age_bucket is a computed method rather than a real field admin.list_filter can
+    # point at directly (a real field is required there; a bare method raises Django's
+    # admin.E116 check).
+    title = "Åldersgrupp"
+    parameter_name = "age_bucket"
+
+    def lookups(self, request, model_admin):
+        return [(value, label) for value, label, _ in _AGE_BUCKET_RANGES]
+
+    def queryset(self, request, queryset):
+        for value, _, (lo, hi) in _AGE_BUCKET_RANGES:
+            if self.value() == value:
+                if lo is not None:
+                    queryset = queryset.filter(age__gte=lo)
+                if hi is not None:
+                    queryset = queryset.filter(age__lt=hi)
+                return queryset
+        return queryset
+
 
 @admin.action(description="Gör live (synlig för gäster + på storbild)")
 def make_live(modeladmin, request, queryset):
@@ -43,7 +78,15 @@ class QuestionAdmin(admin.ModelAdmin):
     # a second question to "system" (which create_identity()'s lookup would then find
     # ambiguous) or un-flag the real one via the admin form. Proportionate to this being a
     # private single-household tool, not hardening against an adversarial host.
-    readonly_fields = ("is_system",)
+    #
+    # `type` is additionally locked down, but only on the system row itself: system_age_question()
+    # looks the row up by (is_system=True, type=NUMBER), so changing `type` away from NUMBER on
+    # that one row via the admin change form would silently break create_identity() for every
+    # future signup. Ordinary questions keep `type` freely editable.
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.is_system:
+            return ("is_system", "type")
+        return ("is_system",)
 
     def has_delete_permission(self, request, obj=None):
         # The system age question backs every guest registration (create_identity) --
@@ -63,8 +106,10 @@ class RespondentAdmin(admin.ModelAdmin):
     # drill-down here, that would break the "party anonymous" model.
     list_display = ("id", "age", "age_bucket", "sex", "side", "relation", "response_count", "created_at")
     # Filtering on the raw "age" would give one filter option per distinct age (useless
-    # with a small guest list); filter on the decade bucket instead, same as before.
-    list_filter = ("sex", "side", "relation")
+    # with a small guest list); filter on the decade bucket instead, same as before, via the
+    # custom AgeBucketFilter above (age_bucket itself is a computed @admin.display method, not
+    # a real field, so it can't go directly in list_filter).
+    list_filter = ("sex", "side", "relation", AgeBucketFilter)
     readonly_fields = [f.name for f in Respondent._meta.fields]
 
     @admin.display(description="Åldersgrupp")

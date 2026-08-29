@@ -17,14 +17,31 @@ _BREAKDOWN_FIELD = {
     BigScreenState.Breakdown.RELATION: "relation",
 }
 
+# Chronological (not lexicographic) order for AGE breakdown labels, keyed by each
+# bucket's decade start -- plain `sorted()` on the labels themselves puts "Under 20"
+# after "50 eller äldre" ('U' > '5' in codepoint order), which reads as nonsense on
+# the big screen. Sex/side/relation have no such ordering (their sort is purely for
+# stable, deterministic output), so this key is applied only to the AGE dimension.
+_AGE_LABEL_ORDER = {
+    "Under 20": 0,
+    "20-talet": 20,
+    "30-talet": 30,
+    "40-talet": 40,
+    "50 eller äldre": 50,
+}
+
 
 def compute_breakdown(question: Question, breakdown: str, aggregation: str | None = None, threshold: float | None = None):
-    """Returns {group_label: aggregate_dict}, ordered by group_label."""
+    """Returns {group_label: aggregate_dict}, ordered by group_label (chronologically
+    for AGE, lexicographically for every other dimension -- see _AGE_LABEL_ORDER)."""
     responses = Response.objects.filter(question=question).select_related("respondent")
     groups = _group(responses, breakdown)
+    if breakdown == BigScreenState.Breakdown.AGE:
+        items = sorted(groups.items(), key=lambda item: _AGE_LABEL_ORDER[item[0]])
+    else:
+        items = sorted(groups.items())
     return {
-        label: _aggregate_group(question.type, group_responses, aggregation, threshold)
-        for label, group_responses in sorted(groups.items())
+        label: _aggregate_group(question.type, group_responses, aggregation, threshold) for label, group_responses in items
     }
 
 

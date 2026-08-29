@@ -54,21 +54,25 @@ def bucket_to_age(apps, schema_editor):
 
 
 def age_to_bucket(apps, schema_editor):
-    # Only reachable by explicitly unapplying this migration (`migrate pulse 0001`);
-    # reuses the real bucketing rule from pulse/models.py rather than re-deriving decade
-    # boundaries here, so the two can't drift out of sync.
-    from pulse.models import age_bucket_label
-
-    label_to_bucket = {
-        "Under 20": "20s",  # closest available bucket pre-migration; see module docstring above
-        "20-talet": "20s",
-        "30-talet": "30s",
-        "40-talet": "40s",
-        "50 eller äldre": "50+",
-    }
+    # Only reachable by explicitly unapplying this migration (`migrate pulse 0001`). Migrations
+    # are frozen historical records, so this inlines the write-time decade boundaries directly
+    # (same boundaries as bucket_to_age's `midpoint` dict above) rather than importing
+    # pulse.models.age_bucket_label() -- that function is free to change in the future, and this
+    # migration must keep reproducing exactly what it did on the day it was written regardless.
+    # Ages below 20 have no bucket of their own pre-migration (the old dropdown started at
+    # "20-talet"), so they collapse into "20s", the closest available bucket.
     Respondent = apps.get_model("pulse", "Respondent")
     for respondent in Respondent.objects.all():
-        respondent.age_bucket = label_to_bucket[age_bucket_label(respondent.age)]
+        age = respondent.age
+        if age < 30:
+            bucket = "20s"
+        elif age < 40:
+            bucket = "30s"
+        elif age < 50:
+            bucket = "40s"
+        else:
+            bucket = "50+"
+        respondent.age_bucket = bucket
         respondent.save(update_fields=["age_bucket"])
 
 

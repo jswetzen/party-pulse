@@ -54,6 +54,20 @@ def test_questionnaire_excludes_system_age_question_even_without_a_response(clie
     assert Question.system_age_question() not in response.context["questions"]
 
 
+def test_answer_question_rejects_posting_to_the_system_age_question(client):
+    # Mirrors test_questionnaire_excludes_system_age_question_even_without_a_response above:
+    # is_system=False must also gate answer_question() itself, not just the questionnaire
+    # listing -- otherwise a guest who discovers the system question's real id (e.g. from the
+    # host console's screen_control dropdown, which does show it) could POST straight to it and
+    # overwrite the auto-recorded age Response that create_identity() wrote.
+    respondent = Respondent.objects.create(age=30, sex="female", side="bride", relation="family")
+    system_question = Question.system_age_question()
+
+    response = client.post(f"/r/{respondent.id}/answer/{system_question.id}/", {"answer": "99"})
+
+    assert response.status_code == 404
+
+
 def test_age_stat_by_side_end_to_end(client):
     # Registers respondents through the real create_identity view (not the ORM directly), then
     # proves the resulting age Responses feed compute_breakdown() correctly grouped by side --
