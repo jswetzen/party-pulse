@@ -14,12 +14,7 @@
         <input type="text" id="alias" required>
       </label>
       <label>Ålder
-        <select name="age_bucket" required>
-          <option value="20s">20-talet</option>
-          <option value="30s">30-talet</option>
-          <option value="40s">40-talet</option>
-          <option value="50+">50 eller äldre</option>
-        </select>
+        <input type="number" name="age" inputmode="numeric" min="1" max="119" placeholder="t.ex. 34" required>
       </label>
       <label>Kön
         <select name="sex" required>
@@ -38,7 +33,7 @@
         <select name="relation" required>
           <option value="friend">Vän</option>
           <option value="family">Familj</option>
-          <option value="plus_one">Plus one</option>
+          <option value="plus_one">Plus en</option>
         </select>
       </label>
       <button type="submit">Kom igång</button>

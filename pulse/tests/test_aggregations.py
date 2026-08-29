@@ -1,13 +1,15 @@
 import pytest
 
 from pulse.aggregations import compute_breakdown
-from pulse.models import BigScreenState, Question, Respondent, Response
+from pulse.models import BigScreenState, Question, Respondent, Response, age_bucket_label
 
 pytestmark = pytest.mark.django_db
 
 
 def make_respondent(**kwargs):
-    defaults = dict(age_bucket="30s", sex="female", side="bride", relation="friend")
+    # age=35 lands in the "30-talet" bucket, matching what the old age_bucket="30s"
+    # default used to mean, so existing tests below keep grouping the way they always did.
+    defaults = dict(age=35, sex="female", side="bride", relation="friend")
     defaults.update(kwargs)
     return Respondent.objects.create(**defaults)
 
@@ -20,6 +22,41 @@ def test_boolean_overall_breakdown():
     result = compute_breakdown(question, BigScreenState.Breakdown.OVERALL)
 
     assert result == {"Alla": {"count": 2, "yes_pct": 50.0}}
+
+
+def test_boolean_grouped_by_age():
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    Response.objects.create(respondent=make_respondent(age=25), question=question, answer={"value": True})
+    Response.objects.create(respondent=make_respondent(age=45), question=question, answer={"value": False})
+
+    result = compute_breakdown(question, BigScreenState.Breakdown.AGE)
+
+    # Age has no stored `choices` (unlike sex/side/relation) -- _group() special-cases
+    # it to bucket by decade via age_bucket_label() instead of get_<field>_display().
+    assert result["20-talet"]["yes_pct"] == 100.0
+    assert result["40-talet"]["yes_pct"] == 0.0
+
+
+@pytest.mark.parametrize(
+    "age,expected_label",
+    [
+        (1, "Under 20"),
+        (19, "Under 20"),
+        (20, "20-talet"),
+        (29, "20-talet"),
+        (30, "30-talet"),
+        (39, "30-talet"),
+        (40, "40-talet"),
+        (49, "40-talet"),
+        (50, "50 eller äldre"),
+        (119, "50 eller äldre"),
+    ],
+)
+def test_age_bucket_label_boundaries(age, expected_label):
+    # The one genuinely new piece of logic here is the decade-boundary math (age //
+    # 10 * 10) -- exercise every boundary explicitly rather than trusting the
+    # generalized formula on a couple of mid-decade examples.
+    assert age_bucket_label(age) == expected_label
 
 
 def test_boolean_grouped_by_side():

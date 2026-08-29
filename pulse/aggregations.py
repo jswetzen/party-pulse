@@ -13,7 +13,6 @@ from .models import BigScreenState, Question, Response
 
 _BREAKDOWN_FIELD = {
     BigScreenState.Breakdown.SEX: "sex",
-    BigScreenState.Breakdown.AGE: "age_bucket",
     BigScreenState.Breakdown.SIDE: "side",
     BigScreenState.Breakdown.RELATION: "relation",
 }
@@ -32,10 +31,17 @@ def compute_breakdown(question: Question, breakdown: str, aggregation: str | Non
 def _group(responses, breakdown: str) -> dict[str, list[Response]]:
     if breakdown == BigScreenState.Breakdown.OVERALL:
         return {"Alla": list(responses)}
+    groups: dict[str, list[Response]] = defaultdict(list)
+    if breakdown == BigScreenState.Breakdown.AGE:
+        # Age has no Django `choices` to drive the generic get_<field>_display()
+        # trick below — Respondent stores an exact age (see pulse/models.py), and
+        # the decade bucket is computed from it at read time instead.
+        for r in responses:
+            groups[r.respondent.age_bucket_label].append(r)
+        return dict(groups)
     attr = _BREAKDOWN_FIELD[breakdown]
     # Group by the Swedish display label (e.g. "Brudens sida"), not the raw
     # stored value ("bride") — this is guest/host-facing, entirely Swedish.
-    groups: dict[str, list[Response]] = defaultdict(list)
     for r in responses:
         label = getattr(r.respondent, f"get_{attr}_display")()
         groups[label].append(r)

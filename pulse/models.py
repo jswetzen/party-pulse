@@ -1,18 +1,52 @@
 import uuid
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+
+# Decade labels for age -> bucket display, reused by both Respondent.age_bucket_label
+# and the aggregation engine (pulse/aggregations.py). Originally these were the fixed
+# choices of a guest-facing "which decade are you in" dropdown; we now capture an exact
+# age instead (see AGE_MIN/AGE_MAX below and the age_bucket migration) and derive the
+# same labels from it at read time, so any existing "grouped by 30-talet" behaviour is
+# unchanged. Keyed by the decade's *start* (20, 30, 40) so the lookup is one dict index
+# rather than four hardcoded if/elif branches -- 50+ is handled separately below since
+# it isn't a single decade, it's "that decade or later".
+_DECADE_LABELS = {
+    20: "20-talet",
+    30: "30-talet",
+    40: "40-talet",
+}
+_FIFTY_PLUS_LABEL = "50 eller äldre"
+_UNDER_TWENTY_LABEL = "Under 20"
+
+# Bounds for the guest-facing exact-age input. Lower bound of 1 (not 0) because "0 years
+# old" is never a meaningful self-report at a wedding; upper bound of 119 is generous
+# headroom past any plausible guest age without being unbounded (catches fat-finger typos
+# like an extra trailing digit).
+AGE_MIN = 1
+AGE_MAX = 119
+
+
+def age_bucket_label(age: int) -> str:
+    """Map an exact age to the same Swedish decade-bucket label the old age_bucket
+    dropdown used, for continuity in aggregation/display (see PLAN.md "Demographics").
+
+    Buckets below 20 have no equivalent in the old scheme (the dropdown started at
+    "20-talet") because self-reporting "which decade" only made sense once you're solidly
+    in one; an exact age has no such gap, so we need a label for it anyway.
+    """
+    if age < 20:
+        return _UNDER_TWENTY_LABEL
+    decade_start = (age // 10) * 10
+    if decade_start >= 50:
+        return _FIFTY_PLUS_LABEL
+    return _DECADE_LABELS[decade_start]
 
 
 class Respondent(models.Model):
     """One guest identity. No accounts — the guest app maps an opaque
     localStorage token 1:1 to a Respondent; a device can hold several
     (shared phones), switched by a locally-stored alias never sent here."""
-
-    class AgeBucket(models.TextChoices):
-        TWENTIES = "20s", "20-talet"
-        THIRTIES = "30s", "30-talet"
-        FORTIES = "40s", "40-talet"
-        FIFTY_PLUS = "50+", "50 eller äldre"
 
     class Sex(models.TextChoices):
         MALE = "male", "Man"
@@ -26,14 +60,27 @@ class Respondent(models.Model):
     class Relation(models.TextChoices):
         FRIEND = "friend", "Vän"
         FAMILY = "family", "Familj"
-        PLUS_ONE = "plus_one", "Plus one"
+        PLUS_ONE = "plus_one", "Plus en"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    age_bucket = models.CharField(max_length=8, choices=AgeBucket.choices)
+    # Exact age, not a self-reported decade bucket -- see age_bucket_label() above for
+    # why, and the 0002 migration for how this replaced the old age_bucket column.
+    age = models.PositiveSmallIntegerField(
+        validators=[
+            MinValueValidator(AGE_MIN, message="Åldern måste vara minst 1 år."),
+            MaxValueValidator(AGE_MAX, message="Åldern verkar inte stämma, kolla att du skrev rätt."),
+        ]
+    )
     sex = models.CharField(max_length=8, choices=Sex.choices)
     side = models.CharField(max_length=8, choices=Side.choices)
     relation = models.CharField(max_length=8, choices=Relation.choices)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def age_bucket_label(self) -> str:
+        """Swedish decade-bucket label for this respondent's age, e.g. "30-talet".
+        See module-level age_bucket_label() for the bucketing rule."""
+        return age_bucket_label(self.age)
 
     def __str__(self):
         return f"{self.get_side_display()} · {self.get_relation_display()} ({str(self.id)[:8]})"

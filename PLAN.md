@@ -52,9 +52,12 @@ only appear when the guest manually reopens/refreshes.
 
 ## Demographics
 
-Per respondent (fixed set, columns not EAV — don't over-engineer): age bucket (20s/30s/40s/50+),
-sex (male/female), side (bride's/groom's/both), relation (friend/family/plus-one). Required at
-first entry. See `Respondent` in `pulse/models.py`.
+Per respondent (fixed set, columns not EAV — don't over-engineer): exact age (an integer, not a
+self-reported decade bucket — "20-talet" as a dropdown was ambiguous UX and a bucket alone can't
+later be un-bucketed for things like "oldest guest"; the decade label is now derived from the
+exact age at aggregation/display time, see `age_bucket_label()`), sex (male/female), side
+(bride's/groom's/both), relation (friend/family/plus-one). Required at first entry. See
+`Respondent` in `pulse/models.py`.
 
 ## Question types
 
@@ -77,7 +80,7 @@ restructuring, since `_aggregate_group` is the only place that branches on quest
 
 Implemented in `pulse/models.py`:
 
-- **Respondent**: id (uuid), age_bucket, sex, side, relation, created_at
+- **Respondent**: id (uuid), age, sex, side, relation, created_at
 - **Question**: id, text_sv (Swedish), type (boolean|multiple_choice|number), options (json, for
   multiple_choice), status (draft|live|archived), **order** (int — added during refinement; the
   original idea's data model specified host-console "reorder" but had no field to reorder by),

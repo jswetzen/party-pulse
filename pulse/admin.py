@@ -45,9 +45,15 @@ class RespondentAdmin(admin.ModelAdmin):
     # Counts-only overview per PLAN.md ("respondent/response overview
     # (counts only, sanity check)") — deliberately no per-guest answer
     # drill-down here, that would break the "party anonymous" model.
-    list_display = ("id", "age_bucket", "sex", "side", "relation", "response_count", "created_at")
-    list_filter = ("age_bucket", "sex", "side", "relation")
+    list_display = ("id", "age", "age_bucket", "sex", "side", "relation", "response_count", "created_at")
+    # Filtering on the raw "age" would give one filter option per distinct age (useless
+    # with a small guest list); filter on the decade bucket instead, same as before.
+    list_filter = ("sex", "side", "relation")
     readonly_fields = [f.name for f in Respondent._meta.fields]
+
+    @admin.display(description="Åldersgrupp")
+    def age_bucket(self, obj):
+        return obj.age_bucket_label
 
     @admin.display(description="Svar")
     def response_count(self, obj):
