@@ -32,12 +32,28 @@ def archive_questions(modeladmin, request, queryset):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ("text_sv", "type", "status", "source", "suggestion_review_status", "order")
+    list_display = ("text_sv", "type", "status", "source", "suggestion_review_status", "order", "is_system")
     list_editable = ("order",)
-    list_filter = ("status", "type", "source", "suggestion_review_status")
+    list_filter = ("status", "type", "source", "suggestion_review_status", "is_system")
     search_fields = ("text_sv",)
     ordering = ("order", "created_at")
     actions = [make_live, make_draft, archive_questions]
+    # is_system is provisioned once by the 0004 migration (see Question.system_age_question())
+    # and looked up by that flag, not by text -- read-only here so nobody can accidentally flip
+    # a second question to "system" (which create_identity()'s lookup would then find
+    # ambiguous) or un-flag the real one via the admin form. Proportionate to this being a
+    # private single-household tool, not hardening against an adversarial host.
+    readonly_fields = ("is_system",)
+
+    def has_delete_permission(self, request, obj=None):
+        # The system age question backs every guest registration (create_identity) --
+        # deleting it from admin would silently break signups from that point on. Ordinary
+        # host/guest-suggested questions are unaffected; this only blocks is_system rows, and
+        # applies to both the single-object delete button and the bulk "Delete selected"
+        # action (Django's admin checks has_delete_permission per object for both).
+        if obj is not None and obj.is_system:
+            return False
+        return super().has_delete_permission(request, obj)
 
 
 @admin.register(Respondent)

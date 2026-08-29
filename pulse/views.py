@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -23,7 +24,16 @@ def create_identity(request):
     form = RespondentForm(request.POST)
     if not form.is_valid():
         return JsonResponse({"errors": form.errors}, status=400)
-    respondent = form.save()
+    # Wrapped in a transaction so a failure creating the age Response (e.g. the system
+    # question is somehow missing) can't leave behind a Respondent with no matching age
+    # answer -- see Question.system_age_question() and PLAN.md "Demographics".
+    with transaction.atomic():
+        respondent = form.save()
+        Response.objects.create(
+            respondent=respondent,
+            question=Question.system_age_question(),
+            answer={"value": respondent.age},
+        )
     return JsonResponse({"id": str(respondent.id)})
 
 
@@ -37,7 +47,10 @@ def questionnaire(request, respondent_id):
         # doesn't just lead back here in a loop.
         return redirect(f"/?stale={respondent_id}")
     answered_ids = Response.objects.filter(respondent=respondent).values_list("question_id", flat=True)
-    questions = Question.objects.filter(status=Question.Status.LIVE).exclude(id__in=answered_ids)
+    # is_system=False excludes the system age question as a backstop in case its auto-answer
+    # step in create_identity() ever failed to run for some respondent -- the primary
+    # mechanism is that auto-answer, this exclusion is belt-and-suspenders, not the main path.
+    questions = Question.objects.filter(status=Question.Status.LIVE, is_system=False).exclude(id__in=answered_ids)
     return render(
         request,
         "pulse/questionnaire.html",

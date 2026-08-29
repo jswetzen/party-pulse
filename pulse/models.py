@@ -125,10 +125,30 @@ class Question(models.Model):
     suggestion_review_status = models.CharField(
         max_length=10, choices=SuggestionReviewStatus.choices, null=True, blank=True
     )
+    # System-managed questions are never shown in the guest questionnaire and are never
+    # answered through the normal answer_question flow -- currently exactly one exists: the
+    # NUMBER question every guest answers implicitly at registration time with their own
+    # Respondent.age (see create_identity() in pulse/views.py and Question.system_age_question()
+    # below). Modelled as a plain BooleanField on an ordinary Question row -- not a separate
+    # table/parallel demographic-stats system -- specifically so it's a completely normal LIVE
+    # NUMBER question as far as the host console and the generic compute_breakdown() engine are
+    # concerned; "average age by side" then needs zero new code in either place. See PLAN.md
+    # "Generic stats engine".
+    is_system = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["order", "created_at"]
+
+    @classmethod
+    def system_age_question(cls):
+        """The one system-managed NUMBER question representing exact guest age. Looked up by
+        is_system+type rather than matching on text_sv, so a host editing the question's wording
+        in admin (it's guest-invisible, but the host still sees it in the screen_control
+        dropdown) can never silently break create_identity()'s auto-answer step. Created by the
+        0004 migration; raises Question.DoesNotExist if that migration hasn't run, same as any
+        other lookup of required, migration-provisioned data."""
+        return cls.objects.get(is_system=True, type=cls.Type.NUMBER)
 
     def __str__(self):
         return self.text_sv[:60]
