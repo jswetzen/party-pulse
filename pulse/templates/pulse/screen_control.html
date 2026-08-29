@@ -10,7 +10,7 @@
       <a class="btn secondary" href="{% url 'screen-display' %}" target="_blank">Öppna storbild &nearr;</a>
     </nav>
 
-    <form method="post" class="card">
+    <form method="post" class="card" id="screen-control-form">
       {% csrf_token %}
       <label>Läge
         <select name="mode">
@@ -22,17 +22,17 @@
         <select name="question">
           <option value="">—</option>
           {% for q in live_questions %}
-            <option value="{{ q.id }}" {% if state.question_id == q.id %}selected{% endif %}>{{ q.text_sv }}</option>
+            <option value="{{ q.id }}" {% if prefill_question_id == q.id %}selected{% endif %}>{{ q.text_sv }}</option>
           {% endfor %}
         </select>
       </label>
       <label>Uppdelning
         <select name="breakdown">
-          <option value="overall" {% if state.breakdown == "overall" %}selected{% endif %}>Alla</option>
-          <option value="sex" {% if state.breakdown == "sex" %}selected{% endif %}>Kön</option>
-          <option value="age" {% if state.breakdown == "age" %}selected{% endif %}>Åldersgrupp</option>
-          <option value="side" {% if state.breakdown == "side" %}selected{% endif %}>Sida</option>
-          <option value="relation" {% if state.breakdown == "relation" %}selected{% endif %}>Relation</option>
+          <option value="overall" {% if prefill_breakdown == "overall" %}selected{% endif %}>Alla</option>
+          <option value="sex" {% if prefill_breakdown == "sex" %}selected{% endif %}>Kön</option>
+          <option value="age" {% if prefill_breakdown == "age" %}selected{% endif %}>Åldersgrupp</option>
+          <option value="side" {% if prefill_breakdown == "side" %}selected{% endif %}>Sida</option>
+          <option value="relation" {% if prefill_breakdown == "relation" %}selected{% endif %}>Relation</option>
         </select>
       </label>
       <label>Beräkning (endast nummer-frågor)
@@ -57,5 +57,31 @@
     <span class="host-status{% if state.revealed %} host-status--live{% endif %}">
       {% if state.revealed %}● Resultat visas{% else %}○ Väntar{% endif %}
     </span>
+
+    <section class="suggestions">
+      <h2>Intressanta fynd</h2>
+      <p class="suggestions__intro">
+        Automatiskt hittade skillnader (eller ovanligt stor samstämmighet) mellan grupper,
+        rangordnat efter hur extremt fyndet är. Ren tipslista — klicka för att fylla i
+        formuläret ovan, du väljer fortfarande själv "visa"/"visa resultat".
+      </p>
+      {% if suggestions %}
+        <div class="suggestion-list">
+          {% for s in suggestions %}
+            <a class="suggestion-card" href="{% url 'host-screen-control' %}?question={{ s.question_id }}&breakdown={{ s.breakdown }}#screen-control-form">
+              <div class="suggestion-card__head">
+                <span class="suggestion-card__question">{{ s.question_text }}</span>
+                {% if s.is_small_sample %}<span class="badge badge--small-sample">Litet urval</span>{% endif %}
+              </div>
+              <div class="suggestion-card__meta">{{ s.breakdown_label }} · {{ s.group_label }}</div>
+              <p class="suggestion-card__blurb">{{ s.blurb }}</p>
+              <div class="suggestion-card__score">Avvikelse: {{ s.score|floatformat:2 }}</div>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="suggestions__empty">Inga fynd än — kommer synas här när gäster har svarat på frågor.</p>
+      {% endif %}
+    </section>
   </div>
 {% endblock %}

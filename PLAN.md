@@ -171,10 +171,45 @@ grouped counts/percentages/aggregates, never a `Response` row).
     into CSS/HTML-attribute context, while leaving the human-readable text correctly
     comma-formatted.
 
+## Interesting stats suggestions
+
+A read-only "Intressanta fynd" panel on the host console (`pulse/templates/pulse/screen_control.html`,
+next to but visually separate from the existing screen-control form) surfaces auto-ranked
+(question, breakdown, group) findings so the host doesn't have to manually scan ~39 questions x 4
+breakdowns to find something worth showing. Global scan, recomputed synchronously on every
+`screen_control` page load (`pulse/suggestions.py`'s `compute_suggestions()`) — no caching, no
+background job; confirmed cheap at this app's real scale (39 seeded questions x 4 breakdowns x a
+handful of groups each).
+
+Scoring is a pluggable strategy (`pulse/suggestions.py`'s `SCORING_STRATEGIES` registry) so a
+future simple "% gap" mode can be added later without restructuring. The live default,
+`"effect_size"`, is one function per question type (mirrors `aggregations._aggregate_group`'s
+"one function branching on type" pattern, not type-specific duplication):
+- Boolean: Cohen's h between the group's yes-fraction and the overall yes-fraction.
+- Multiple choice: total variation distance between the group's option distribution and the
+  overall distribution (bounded to [0, 1] regardless of option count, so it stays comparable
+  across questions).
+- Number: standardized mean difference — group mean minus overall mean, divided by the overall
+  population's stdev (`statistics.pstdev`, not sample stdev — PLAN.md's anonymity model treats the
+  guest list as the whole population, not a sample of a larger one).
+
+A single list, ranked by |score| descending — not two separate "divergent" / "similar" lists, per
+the original decision that "uncanny similarity" is just the same score's low end. Groups below
+`MIN_SAMPLE_SIZE = 5` responses are never excluded (this app's "party anonymous" model trusts the
+host to judge live, not the app to silently hide data), only flagged `is_small_sample` for a
+caveat badge.
+
+Clicking a suggestion card links back to `screen_control` with `?question=&breakdown=` query
+params, which only pre-select those two fields in the form (`views.screen_control`'s
+`prefill_question_id`/`prefill_breakdown`) — it never writes to the `BigScreenState` singleton or
+reveals anything; the host still has to press "Visa fråga" / "Visa resultat" themselves, same as
+always. Covered by `pulse/tests/test_suggestions.py` (per-type scoring math, small-sample
+flagging, a genuinely extreme case and a genuinely similar case) and
+`pulse/tests/test_views.py` (prefill-without-persisting).
+
 ## Backlog / explicitly out of scope for now
 
-Guest upvoting on suggested questions; automatic "interesting" heuristic/highlighting (host
-manually picks what to show for now); statistics projections/trends over the evening; live push
+Guest upvoting on suggested questions; statistics projections/trends over the evening; live push
 notifications; more demographic fields beyond the four listed (easy to add later, don't build a
 flexible EAV model preemptively); larger question bank and demographic field brainstorm beyond
 the 28 seeded questions (content work, not architecture).
