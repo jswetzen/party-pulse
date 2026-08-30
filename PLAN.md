@@ -295,6 +295,92 @@ flagging on either side, that pairwise lists are additive alongside the original
 that age's breakdown produces exactly C(5,2)=10 pairs without truncation or blowup) plus all
 pre-existing vs-overall tests passing unchanged.
 
+**Combined "top 10, all categories" highlights, shipped 2026-08-30**: the six lists above are
+each genuinely useful on their own, but Johan wanted a single "just show me the best stuff"
+view at the top of the panel too, rather than making the host scan six separately-headed
+lists to find what to show next. The obvious naive approach — pool every entry from all six
+lists and sort by `|score|` — is actively wrong here: the six lists' scores live on
+incomparable units (Cohen's h, total variation distance, a standardized mean difference, raw
+percentage points, and a raw number-question unit difference), so a literal cross-scale sort
+would let whichever unit happens to produce the largest raw numbers dominate the top 10 for
+reasons that have nothing to do with which finding is actually most interesting. Raised with
+Johan directly; he made three explicit calls, implemented exactly as decided (no
+re-litigation here):
+
+1. **Merging algorithm: a round-robin interleave, not a numeric cross-scale sort.** Take
+   rank-1 from each of the four "extreme" (magnitude-ranked) pools — `most_different`,
+   `most_different_pairwise`, `biggest_pct_gap`, `biggest_pct_gap_pairwise`, in that fixed
+   order — then rank-2 from each, and so on until the highlights list is full. A pool that
+   runs out (or was never long enough — e.g. fewer than 4 breakdowns having any pairwise
+   pairs at all) is silently skipped for the rest of the round-robin, never padded and never
+   an error. This sidesteps the incomparable-units problem entirely: nothing ever compares a
+   Cohen's h to a raw percentage point, the four pools just take turns contributing their own
+   already-correctly-sorted best candidates.
+2. **Up to 2 of the 10 slots are reserved for "Mest lika" (similarity) highlights** — index 0
+   (the single best/lowest-`|score|` entry) of `most_similar` and of
+   `most_similar_pairwise`, one slot each. A magnitude-ranked round-robin over the four
+   "extreme" pools would never naturally surface a similarity finding (it's definitionally
+   the *low* end of a pool sorted by descending `|score|`), so without this carve-out the
+   combined view would silently lose the "uncanny agreement" findings the two "Mest lika"
+   lists exist to surface at all. If one of the two similarity pools is empty, only 1 slot is
+   reserved (from whichever pool has entries); if both are empty, 0 are reserved and the
+   round-robin over the four extreme pools gets to use all 10 slots instead — never an error,
+   never a forced-empty slot.
+3. **The six existing sections stay, unchanged, just collapsed by default** below the new
+   combined view, via a plain `<details>`/`<summary>` disclosure widget in
+   `screen_control.html` — no JS framework, matching this app's htmx-only/no-build-step
+   approach (see "Tech stack decision" below). Nothing was removed or renamed; a host who
+   wants to browse one category at a time (e.g. only "Störst procentskillnad, grupp mot
+   grupp") can still expand it and see exactly what was there before this change.
+
+Implementation is a **presentation-layer composition step, not new scoring**: a new
+`Highlight` dataclass (`pulse/suggestions.py`) wraps an existing `Suggestion` or
+`PairwiseSuggestion` instance — never re-scores or recomputes anything — with whatever a
+combined card needs to render standalone: `category`/`category_label` (which of the six
+lists it came from, reusing the exact Swedish `<h3>` headings already in the template
+verbatim, e.g. "Mest olika, grupp mot grupp"), `score_label` ("Avvikelse" for the two
+effect_size-based categories, "Skillnad" for the two simple_pct_gap-based ones — matching
+each section's own existing score-line wording), `is_pairwise` plus a pre-formatted
+`group_display` ("kvinnor" vs. "kvinnor vs män") and `sample_size_display` ("n=6" vs. "n=6 vs
+n=4") so the template never has to branch on vs-overall-vs-pairwise shape itself, and
+`is_small_sample`/`score_display`/`blurb`/`question_id`/`question_text`/`breakdown`/
+`breakdown_label` carried straight through. Deliberately does NOT carry the raw `score`
+float — keeping it off this dataclass makes a future "just sort by score" regression
+structurally impossible, not just discouraged by convention. `SuggestionLists` grew a
+`highlights: list[Highlight]` field, built by a new `_build_highlights()` after the six pools
+are assembled (round-robin + reservation exactly as described above, plus a `seen`-set
+de-dup pass across *both* phases keyed on `(question_id, breakdown, group-or-frozenset-of-
+group-pair)` — needed because the same `(question, breakdown, group)` vs-overall finding can
+legitimately be the extreme of *both* the effect_size and simple_pct_gap pools at once, and a
+small enough pool can make `most_similar[0]` literally the same entry as
+`most_different[0]`; either way the combined view shows that finding once, not twice under
+two labels).
+
+`screen_control.html`: a new "Topp 10, alla kategorier" card list sits at the top of the
+`.suggestions` section (same `.suggestion-card`/`.suggestion-list` markup and click-through
+as every other card — still only pre-fills the form via `?question=&breakdown=`, still never
+writes state), with a small `.badge--category` tag per card naming its source category and a
+`.suggestion-card--similarity` left-border accent on the (at most two) reserved "Mest lika"
+picks so they read as intentionally pinned rather than randomly out of place among the
+higher-magnitude round-robin picks. The six original sections follow inside a single
+`<details>` (closed by default) with one `<summary>Visa alla sex kategorier var för
+sig</summary>` — Johan's decision left the exact collapse granularity (one `<details>` for
+all six vs. one per section) to implementation; one shared disclosure was chosen since the
+six sections already read as one coherent "detailed breakdown" unit once collapsed out of the
+way, rather than something a host would want to reveal one at a time.
+
+Covered by 8 new tests in `pulse/tests/test_suggestions.py` (32 total now): the round-robin +
+reservation logic is checked via an independent reference re-implementation of the spec
+(`_expected_highlight_keys()`, operating only on the six already-tested pools — a merge-logic
+test, deliberately not re-deriving the underlying per-type scoring math those other tests
+already cover) for a normal varied dataset, a heavy-scoring-ties dataset (the scenario most
+likely to make two categories pick the exact same finding), a completely-empty-pairwise-pools
+dataset (every respondent sharing identical demographics, so zero pairs exist anywhere), and
+a pools-shorter-than-`TOP_N` dataset — plus direct checks that category/score labels match
+their source list, that exactly one reserved slot exists per non-empty similarity pool (and
+never more), that the combined list never exceeds 10 entries, and that it's an empty list
+(not an error) when every one of the six pools is empty.
+
 ## Backlog / explicitly out of scope for now
 
 Guest upvoting on suggested questions; statistics projections/trends over the evening; live push

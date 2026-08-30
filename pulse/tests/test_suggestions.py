@@ -540,3 +540,246 @@ def test_age_breakdown_pairwise_covers_every_unordered_pair_without_blowing_up()
     )
 
     assert len(age_pairs) == 10  # C(5, 2)
+
+
+# ---------------------------------------------------------------------------
+# Combined "top 10, all categories" highlights (compute_suggestions().highlights /
+# pulse.suggestions.Highlight) -- Johan's three explicit design calls (PLAN.md "Interesting
+# stats suggestions", 2026-08-30 "top 10, all categories" follow-up):
+#   1. Round-robin merge of the four "extreme" pools, in a fixed order, one rank at a time.
+#   2. Up to two reserved "Mest lika" slots (one vs-overall, one pairwise), since a
+#      magnitude-ranked round-robin would never naturally surface similarity.
+#   3. The six original sections stay, just collapsed by default in the template (not
+#      exercised here -- that's markup, covered by manual/visual verification).
+#
+# These tests check the MERGE/RESERVATION/DE-DUP logic in `_build_highlights`, not the
+# per-type scoring math the six pools are built from (already covered by every test above --
+# `most_different`/`most_similar`/etc. are trusted inputs here). `_expected_highlight_keys`
+# is an independent transcription of Johan's spec operating only on those already-tested
+# pools, so a test failure here means the *merge*, not the underlying statistics, disagrees
+# with the spec.
+# ---------------------------------------------------------------------------
+
+
+def _highlight_identity(item, is_pairwise):
+    """Same de-duplication key `_build_highlights` uses internally, re-derived here from a
+    Suggestion/PairwiseSuggestion (not imported from suggestions.py) so this reference is
+    genuinely independent of the implementation under test."""
+    if is_pairwise:
+        return (item.question_id, item.breakdown, frozenset({item.group_a_label, item.group_b_label}))
+    return (item.question_id, item.breakdown, item.group_label)
+
+
+def _highlight_key(h):
+    """The same identity, computed from a rendered Highlight instead of the Suggestion/
+    PairwiseSuggestion it was built from -- lets a test compare `compute_suggestions().
+    highlights` directly against `_expected_highlight_keys()` below."""
+    if h.is_pairwise:
+        group_a, group_b = h.group_display.split(" vs ")
+        return (h.question_id, h.breakdown, frozenset({group_a, group_b}))
+    return (h.question_id, h.breakdown, h.group_display)
+
+
+def _expected_highlight_keys(suggestions, limit=10):
+    """Reference implementation of Johan's round-robin + reserved-similarity-slots spec,
+    built purely from the six pools already on `suggestions` (see section docstring above)."""
+    seen = set()
+    keys = []
+    for pool, is_pairwise in ((suggestions.most_similar, False), (suggestions.most_similar_pairwise, True)):
+        if not pool:
+            continue
+        key = _highlight_identity(pool[0], is_pairwise)
+        if key in seen:
+            continue
+        seen.add(key)
+        keys.append(key)
+
+    remaining = limit - len(keys)
+    extreme_pools = [
+        (suggestions.most_different, False),
+        (suggestions.most_different_pairwise, True),
+        (suggestions.biggest_pct_gap, False),
+        (suggestions.biggest_pct_gap_pairwise, True),
+    ]
+    rank = 0
+    picks = []
+    while len(picks) < remaining and any(rank < len(pool) for pool, _ in extreme_pools):
+        for pool, is_pairwise in extreme_pools:
+            if len(picks) >= remaining:
+                break
+            if rank >= len(pool):
+                continue  # this pool is exhausted at this rank -- skip it, don't pad
+            key = _highlight_identity(pool[rank], is_pairwise)
+            if key in seen:
+                continue
+            seen.add(key)
+            picks.append(key)
+        rank += 1
+    keys.extend(picks)
+    return keys
+
+
+def _seed_varied_highlight_data():
+    """A deliberately rich, varied dataset -- multiple question types across all four
+    breakdowns -- so every one of the six ranked pools (and therefore every highlight
+    category) has real, non-degenerate content to draw from. Shared by several tests below
+    that check compute_suggestions().highlights' composition, not the per-type scoring math
+    each pool is built from (covered above)."""
+    for i in range(6):
+        q = Question.objects.create(text_sv=f"Sida-fråga {i}", type=Question.Type.BOOLEAN, status="live")
+        for _ in range(6):
+            answer(q, True, side="bride")
+        for _ in range(6):
+            answer(q, False, side="groom")
+    for i in range(4):
+        q = Question.objects.create(text_sv=f"Kön-fråga {i}", type=Question.Type.BOOLEAN, status="live")
+        for _ in range(4):
+            answer(q, True, sex="female")
+        for _ in range(3):
+            answer(q, True, sex="male")
+        answer(q, False, sex="male")
+    ages = [15, 25, 35, 45, 55]
+    for i in range(4):
+        q = Question.objects.create(text_sv=f"Antal-fråga {i}", type=Question.Type.NUMBER, status="live")
+        for j, age in enumerate(ages):
+            for v in (j + i, j + i + 1, j + i + 2, j + i + 3):
+                answer(q, v, age=age)
+    for i in range(3):
+        q = Question.objects.create(
+            text_sv=f"Dryck-fråga {i}", type=Question.Type.MULTIPLE_CHOICE, options=["Vin", "Öl", "Läsk"], status="live"
+        )
+        for _ in range(5):
+            answer(q, "Vin", relation="friend")
+        for _ in range(5):
+            answer(q, "Öl", relation="family")
+
+
+def test_highlights_match_the_round_robin_reservation_spec():
+    _seed_varied_highlight_data()
+
+    suggestions = compute_suggestions()
+    actual_keys = [_highlight_key(h) for h in suggestions.highlights]
+
+    assert actual_keys == _expected_highlight_keys(suggestions)
+
+
+def test_highlights_category_and_score_labels_match_their_source_list():
+    _seed_varied_highlight_data()
+
+    suggestions = compute_suggestions()
+    expected = {
+        "most_different": ("Mest olika", "Avvikelse", False),
+        "most_different_pairwise": ("Mest olika, grupp mot grupp", "Avvikelse", True),
+        "biggest_pct_gap": ("Störst procentskillnad", "Skillnad", False),
+        "biggest_pct_gap_pairwise": ("Störst procentskillnad, grupp mot grupp", "Skillnad", True),
+        "most_similar": ("Mest lika", "Avvikelse", False),
+        "most_similar_pairwise": ("Mest lika, grupp mot grupp", "Avvikelse", True),
+    }
+
+    assert suggestions.highlights  # sanity: this rich a fixture must produce something
+    seen_categories = {h.category for h in suggestions.highlights}
+    # Every one of the six categories should have a shot at a slot with this much varied
+    # data (4 extreme pools x up to 5 ranks, plus both similarity slots) -- if this ever
+    # comes back short, the fixture stopped being rich enough for these tests' purposes.
+    assert seen_categories == set(expected)
+    for h in suggestions.highlights:
+        label, score_label, is_pairwise = expected[h.category]
+        assert h.category_label == label
+        assert h.score_label == score_label
+        assert h.is_pairwise is is_pairwise
+
+
+def test_highlights_reserve_a_similarity_slot_for_each_non_empty_similarity_pool():
+    _seed_varied_highlight_data()
+
+    suggestions = compute_suggestions()
+    assert suggestions.most_similar and suggestions.most_similar_pairwise  # precondition
+
+    similarity_highlights = [h for h in suggestions.highlights if h.is_similarity]
+    # Exactly one reserved slot per non-empty similarity pool -- never zero here (both pools
+    # have entries) and never more than one per pool (only index 0 is ever reserved).
+    assert {h.category for h in similarity_highlights} == {"most_similar", "most_similar_pairwise"}
+    assert len(similarity_highlights) == 2
+
+
+def test_highlights_never_exceed_ten_and_never_contain_duplicate_findings():
+    _seed_varied_highlight_data()
+
+    suggestions = compute_suggestions()
+    keys = [_highlight_key(h) for h in suggestions.highlights]
+
+    assert len(suggestions.highlights) == 10  # this fixture supplies well over 10 candidates
+    assert len(keys) == len(set(keys))  # no (question, breakdown, group) shows up twice
+
+
+def test_highlights_never_contain_duplicates_even_under_heavy_score_ties():
+    # Every question here has the *identical* side split, so effect_size and simple_pct_gap
+    # tie exactly for every candidate -- the scenario most likely to make "most_different"
+    # and "biggest_pct_gap" (or "most_different_pairwise"/"biggest_pct_gap_pairwise") pick
+    # the very same (question, breakdown, group) at the same rank. The merge must still
+    # de-duplicate correctly rather than showing the same finding under two category labels.
+    for i in range(8):
+        q = Question.objects.create(text_sv=f"Fråga {i}", type=Question.Type.BOOLEAN, status="live")
+        for _ in range(6):
+            answer(q, True, side="bride")
+        for _ in range(6):
+            answer(q, False, side="groom")
+
+    suggestions = compute_suggestions()
+    actual_keys = [_highlight_key(h) for h in suggestions.highlights]
+
+    assert actual_keys == _expected_highlight_keys(suggestions)
+    assert len(actual_keys) == len(set(actual_keys))
+
+
+def test_highlights_gracefully_handle_completely_empty_pairwise_pools():
+    # Every respondent shares the exact same demographic values (make_respondent()'s
+    # untouched defaults) -- so every breakdown has exactly one group for every question,
+    # meaning zero pairs anywhere (itertools.combinations of a 1-item dict is empty). All
+    # three pairwise pools are therefore completely empty, not just short -- the round-robin
+    # and the similarity reservation must both skip these two pools gracefully (decision 1's
+    # "skip a pool once it's exhausted", decision 2's "if one pool is empty, reserve only 1
+    # slot") rather than erroring or padding.
+    for i in range(3):
+        q = Question.objects.create(text_sv=f"Fråga {i}", type=Question.Type.BOOLEAN, status="live")
+        for _ in range(6):
+            answer(q, True)
+        for _ in range(6):
+            answer(q, False)
+
+    suggestions = compute_suggestions()
+
+    assert suggestions.most_different_pairwise == []
+    assert suggestions.most_similar_pairwise == []
+    assert suggestions.biggest_pct_gap_pairwise == []
+    assert suggestions.highlights  # the three vs-overall categories still produce content
+    assert all(not h.is_pairwise for h in suggestions.highlights)
+    # Only one similarity slot is possible here (most_similar_pairwise is empty), never two.
+    assert sum(h.is_similarity for h in suggestions.highlights) == 1
+    actual_keys = [_highlight_key(h) for h in suggestions.highlights]
+    assert actual_keys == _expected_highlight_keys(suggestions)
+
+
+def test_highlights_gracefully_handle_pools_shorter_than_top_n():
+    # A single question's side split gives each vs-overall pool only 2 candidates and each
+    # pairwise pool only 1 -- well under TOP_N=5 -- so the round-robin runs out of ranks to
+    # pull from long before the usual 10-slot ceiling. It must stop there, not pad.
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    for _ in range(6):
+        answer(question, True, side="bride")
+    for _ in range(6):
+        answer(question, False, side="groom")
+
+    suggestions = compute_suggestions()
+    actual_keys = [_highlight_key(h) for h in suggestions.highlights]
+
+    assert actual_keys == _expected_highlight_keys(suggestions)
+    assert 0 < len(suggestions.highlights) < 10
+
+
+def test_highlights_is_empty_when_every_pool_is_empty():
+    # No live questions at all -- every one of the six pools is empty, so the combined
+    # panel must be an empty list, not an error.
+    suggestions = compute_suggestions()
+
+    assert suggestions.highlights == []

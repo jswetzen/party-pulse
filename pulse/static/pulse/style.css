@@ -511,3 +511,38 @@ form.htmx-request .choice__dot {
   background: rgba(219, 169, 85, 0.2);
   color: var(--gold);
 }
+
+/* Combined "Topp 10, alla kategorier" panel (pulse/suggestions.py's `Highlight` /
+   `compute_suggestions().highlights`) -- sits above the six original per-category lists,
+   reusing .suggestion-card/.suggestion-list as-is (same card, same click-through) plus one
+   small addition, the category tag, so a merged card still says which of the six lists it
+   came from. */
+.suggestions__group--highlights h3 { font-size: 1.15rem; }
+.badge--category {
+  background: var(--surface-2);
+  color: var(--mist);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.4rem;
+}
+/* One of the (at most two) reserved "Mest lika" picks (Johan's decision 2: a
+   magnitude-sorted round-robin never naturally surfaces similarity, so up to one highlight
+   from "Mest lika" and one from "Mest lika, grupp mot grupp" are reserved separately) --
+   the category tag above already names it, this is just a quiet visual "pinned" cue so it
+   doesn't read as randomly out of place among the higher-magnitude round-robin picks. */
+.suggestion-card--similarity { border-left-color: var(--rose); }
+
+/* The six original per-category lists (Mest olika/lika, Störst procentskillnad, and their
+   grupp-mot-grupp counterparts) are unchanged in content but now collapsed by default below
+   the combined panel above, via a plain <details>/<summary> disclosure -- no JS framework,
+   matching this app's htmx-only/no-build-step approach (PLAN.md "Tech stack decision"). */
+.suggestions__all summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--cream);
+  margin-top: 1.6rem;
+  padding: 0.6rem 0;
+}
+.suggestions__all summary:hover { color: var(--gold); }

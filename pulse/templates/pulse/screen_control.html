@@ -61,10 +61,45 @@
     <section class="suggestions">
       <h2>Intressanta fynd</h2>
       <p class="suggestions__intro">
-        Automatiskt hittade skillnader (eller ovanligt stor samstämmighet) mellan grupper,
-        i tre separata listor nedan. Ren tipslista — klicka ett kort för att fylla i
-        formuläret ovan, du väljer fortfarande själv "visa"/"visa resultat".
+        Automatiskt hittade skillnader (eller ovanligt stor samstämmighet) mellan grupper.
+        Ren tipslista — klicka ett kort för att fylla i formuläret ovan, du väljer
+        fortfarande själv "visa"/"visa resultat".
       </p>
+
+      <div class="suggestions__group suggestions__group--highlights">
+        <h3>Topp 10, alla kategorier</h3>
+        <p class="suggestions__intro">
+          En sammanslagen topplista över alla sex kategorier nedan: växelvis ett fynd från
+          "Mest olika", "Mest olika, grupp mot grupp", "Störst procentskillnad" och "Störst
+          procentskillnad, grupp mot grupp" (i den ordningen, om och om igen), plus upp till
+          två inpasade "Mest lika"-fynd (annars skulle en lista sorterad på avvikelse aldrig
+          visa någon samstämmighet). Varje kort har en kategoritagg som visar varifrån
+          fyndet kommer — samma sex kategorier finns kvar var för sig, hopfällda, längre ned.
+        </p>
+        {% if suggestions.highlights %}
+          <div class="suggestion-list">
+            {% for h in suggestions.highlights %}
+              <a class="suggestion-card{% if h.is_similarity %} suggestion-card--similarity{% endif %}" href="{% url 'host-screen-control' %}?question={{ h.question_id }}&breakdown={{ h.breakdown }}#screen-control-form">
+                <div class="suggestion-card__head">
+                  <span class="suggestion-card__question">{{ h.question_text }}</span>
+                  {% if h.is_small_sample %}<span class="badge badge--small-sample">Litet urval</span>{% endif %}
+                </div>
+                <div class="suggestion-card__meta">
+                  <span class="badge badge--category">{{ h.category_label }}</span>
+                  {{ h.breakdown_label }} · {{ h.group_display }}
+                </div>
+                <p class="suggestion-card__blurb">{{ h.blurb }}</p>
+                <div class="suggestion-card__score">{{ h.score_label }}: {{ h.score_display }} · {{ h.sample_size_display }}</div>
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="suggestions__empty">Inga fynd än — kommer synas här när gäster har svarat på frågor.</p>
+        {% endif %}
+      </div>
+
+      <details class="suggestions__all">
+        <summary>Visa alla sex kategorier var för sig</summary>
 
       <div class="suggestions__group">
         <h3>Mest olika</h3>
@@ -215,6 +250,8 @@
           <p class="suggestions__empty">Inga fynd än — kommer synas här när gäster har svarat på frågor.</p>
         {% endif %}
       </div>
+
+      </details>
     </section>
   </div>
 {% endblock %}

@@ -141,6 +141,44 @@ class PairwiseSuggestion:
 
 
 @dataclass
+class Highlight:
+    """Template-ready wrapper uniting a vs-overall `Suggestion` or pairwise `PairwiseSuggestion`
+    into one shape, for the combined "top 10, all categories" panel added on top of the six
+    existing lists (`compute_suggestions()`'s `highlights` field; see PLAN.md "Interesting
+    stats suggestions" for Johan's three explicit design calls this implements: round-robin
+    merge order, reserved similarity slots, six sections collapsed-not-removed). This is a
+    presentation-layer composition, not a new scoring computation -- every Highlight is built
+    by wrapping an entry a pool already produced, never by recomputing or re-scoring anything.
+    Deliberately does NOT carry the raw `score` float: `Suggestion`/`PairwiseSuggestion` scores
+    live on incomparable units across the six pools (Cohen's h, TVD, standardized mean diff,
+    raw percentage points, raw number-unit diffs), which is exactly why the round-robin merge
+    exists instead of a literal "sort everything by |score|" -- keeping `score` off this
+    dataclass makes that impossible to do by accident later (e.g. in a future template change),
+    only `score_display` (already human-formatted per-category) is exposed.
+
+    `group_display`/`sample_size_display` fold the vs-overall/pairwise branch in here, once,
+    instead of in the template: a vs-overall finding has one group and one n ("kvinnor",
+    "n=6"), a pairwise one has two of each ("kvinnor vs män", "n=6 vs n=4") -- see
+    `_make_highlight`. `is_pairwise` is still exposed too, for the rare bit of template
+    behaviour (if any) that can't be expressed as a pre-formatted string."""
+
+    category: str  # matches the SuggestionLists field name this came from, e.g. "most_different"
+    category_label: str  # Swedish section heading, reused verbatim from screen_control.html's <h3>s
+    score_label: str  # "Avvikelse" for effect_size categories, "Skillnad" for simple_pct_gap ones
+    is_pairwise: bool  # True for a group-vs-group finding, False for group-vs-overall
+    is_similarity: bool  # True for one of the (at most two) reserved "Mest lika" picks -- see below
+    question_id: int
+    question_text: str
+    breakdown: str
+    breakdown_label: str
+    group_display: str  # "kvinnor" (vs-overall) or "kvinnor vs män" (pairwise), ready to print
+    sample_size_display: str  # "n=6" or "n=6 vs n=4", ready to print
+    score_display: str
+    is_small_sample: bool
+    blurb: str
+
+
+@dataclass
 class SuggestionLists:
     most_different: list[Suggestion]
     most_similar: list[Suggestion]
@@ -148,6 +186,7 @@ class SuggestionLists:
     most_different_pairwise: list[PairwiseSuggestion]
     most_similar_pairwise: list[PairwiseSuggestion]
     biggest_pct_gap_pairwise: list[PairwiseSuggestion]
+    highlights: list[Highlight]
 
 
 def _score_display(scoring: str, question_type: str, score: float) -> str:
@@ -273,6 +312,140 @@ def _score_pool(scoring: str) -> tuple[list[Suggestion], list[PairwiseSuggestion
     return vs_overall, pairwise
 
 
+# How many entries the combined "top 10, all categories" panel surfaces (Johan's decision,
+# PLAN.md "Interesting stats suggestions" -- fixed at 10 regardless of TOP_N/top_n, since it's
+# a presentation choice about the panel, not a scoring-pool size).
+HIGHLIGHTS_N = 10
+
+# Fixed round-robin order for the four "extreme" (magnitude-ranked) pools -- Johan's decision
+# 1: take rank-1 from each pool in this order, then rank-2 from each, etc., skipping a pool
+# once it runs out rather than erroring or padding. Each tuple is
+# (pool attribute name on SuggestionLists, Swedish category label reused verbatim from
+# screen_control.html's <h3>s, score-line label matching that section's existing wording,
+# is_pairwise).
+_EXTREME_CATEGORIES = [
+    ("most_different", "Mest olika", "Avvikelse", False),
+    ("most_different_pairwise", "Mest olika, grupp mot grupp", "Avvikelse", True),
+    ("biggest_pct_gap", "Störst procentskillnad", "Skillnad", False),
+    ("biggest_pct_gap_pairwise", "Störst procentskillnad, grupp mot grupp", "Skillnad", True),
+]
+
+# The two "similarity" pools eligible for a reserved highlight slot -- Johan's decision 2: a
+# magnitude-ranked round-robin over the four pools above would never naturally surface a "Mest
+# lika" finding (it's the *low* end of a pool sorted by descending |score|), so up to one
+# highlight from each is reserved separately, from index 0 (each pool's single best/lowest-
+# |score| entry) rather than folded into the round-robin.
+_SIMILARITY_CATEGORIES = [
+    ("most_similar", "Mest lika", "Avvikelse", False),
+    ("most_similar_pairwise", "Mest lika, grupp mot grupp", "Avvikelse", True),
+]
+
+
+def _highlight_identity(item, is_pairwise: bool):
+    """De-duplication key for a Suggestion/PairwiseSuggestion: identifies "the same finding"
+    regardless of which category list it was drawn from. Needed because a single (question,
+    breakdown, group) vs-overall entry can legitimately be the extreme of BOTH the
+    effect_size and simple_pct_gap pools (two different scores over the same candidate), and
+    -- in a pool small enough that "most different" and "most similar" overlap (see
+    compute_suggestions()'s docstring) -- `most_similar[0]` can literally be the same entry as
+    `most_different[0]`. Either way the combined top-10 should show that finding once, not
+    twice under two labels. Pairwise identity uses a frozenset of the two group labels so
+    swapping which side landed in group_a/group_b (an itertools.combinations incidental, per
+    _score_pool) doesn't produce a false non-duplicate."""
+    if is_pairwise:
+        return (item.question_id, item.breakdown, frozenset({item.group_a_label, item.group_b_label}))
+    return (item.question_id, item.breakdown, item.group_label)
+
+
+def _make_highlight(item, category: str, category_label: str, score_label: str, is_pairwise: bool, is_similarity: bool) -> Highlight:
+    if is_pairwise:
+        group_display = f"{item.group_a_label} vs {item.group_b_label}"
+        sample_size_display = f"n={item.sample_size_a} vs {item.sample_size_b}"
+    else:
+        group_display = item.group_label
+        sample_size_display = f"n={item.sample_size}"
+    return Highlight(
+        category=category,
+        category_label=category_label,
+        score_label=score_label,
+        is_pairwise=is_pairwise,
+        is_similarity=is_similarity,
+        question_id=item.question_id,
+        question_text=item.question_text,
+        breakdown=item.breakdown,
+        breakdown_label=item.breakdown_label,
+        group_display=group_display,
+        sample_size_display=sample_size_display,
+        score_display=item.score_display,
+        is_small_sample=item.is_small_sample,
+        blurb=item.blurb,
+    )
+
+
+def _build_highlights(lists: SuggestionLists) -> list[Highlight]:
+    """Combined "top 10, all categories" list -- Johan's three explicit design calls
+    (PLAN.md "Interesting stats suggestions"), implemented as pure selection/wrapping over the
+    six pools `compute_suggestions()` already sorted and sliced to top_n. Never recomputes or
+    re-scores anything.
+
+    1. Up to 2 reserved similarity highlights first (decision 2): index 0 of `most_similar`
+       and of `most_similar_pairwise`, each only if that pool is non-empty -- so 0, 1, or 2
+       slots are reserved depending on what's actually available, never padded.
+    2. The remaining slots (10 minus however many similarity highlights landed) filled by a
+       fixed-order round-robin over the four "extreme" pools (decision 1): rank-1 from each of
+       most_different / most_different_pairwise / biggest_pct_gap / biggest_pct_gap_pairwise in
+       that order, then rank-2 from each, etc. A pool shorter than the current rank (or
+       already exhausted) is silently skipped -- never an error, never a filler entry.
+
+    A single `seen` de-dup set spans both phases (see _highlight_identity) so the same
+    underlying (question, breakdown, group) finding is never shown twice under two category
+    labels -- a duplicate is simply skipped and the round-robin moves on to the next
+    pool/rank, same graceful "just skip it" behaviour as an exhausted pool.
+
+    Final order returned is similarity highlights (if any) followed by the round-robin
+    picks -- this only affects on-page order (screen_control.html is free to lay these out
+    differently, e.g. visually pinning the similarity card(s) instead of listing them first;
+    Johan's decision left presentation to implementation), it does not affect which findings
+    end up included."""
+    seen: set = set()
+    highlights: list[Highlight] = []
+
+    for pool_name, category_label, score_label, is_pairwise in _SIMILARITY_CATEGORIES:
+        pool = getattr(lists, pool_name)
+        if not pool:
+            continue
+        item = pool[0]
+        identity = _highlight_identity(item, is_pairwise)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        highlights.append(_make_highlight(item, pool_name, category_label, score_label, is_pairwise, is_similarity=True))
+
+    remaining = HIGHLIGHTS_N - len(highlights)
+    extreme_pools = [
+        (getattr(lists, pool_name), pool_name, category_label, score_label, is_pairwise)
+        for pool_name, category_label, score_label, is_pairwise in _EXTREME_CATEGORIES
+    ]
+    extreme_picks: list[Highlight] = []
+    rank = 0
+    while len(extreme_picks) < remaining and any(rank < len(pool) for pool, *_rest in extreme_pools):
+        for pool, pool_name, category_label, score_label, is_pairwise in extreme_pools:
+            if len(extreme_picks) >= remaining:
+                break
+            if rank >= len(pool):
+                continue  # this pool exhausted at this rank -- skip it, don't pad, move on
+            item = pool[rank]
+            identity = _highlight_identity(item, is_pairwise)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            extreme_picks.append(_make_highlight(item, pool_name, category_label, score_label, is_pairwise, is_similarity=False))
+        rank += 1
+
+    highlights.extend(extreme_picks)
+    return highlights
+
+
 def compute_suggestions(top_n: int = TOP_N) -> SuggestionLists:
     """Builds the six ranked lists the host console panel renders -- see module docstring
     for what each one means. Within each of the two pool families (vs-overall,
@@ -298,14 +471,17 @@ def compute_suggestions(top_n: int = TOP_N) -> SuggestionLists:
     pct_gap_pairwise_pool.sort(key=lambda s: abs(s.score), reverse=True)
     biggest_pct_gap_pairwise = pct_gap_pairwise_pool[:top_n]
 
-    return SuggestionLists(
+    lists = SuggestionLists(
         most_different=most_different,
         most_similar=most_similar,
         biggest_pct_gap=biggest_pct_gap,
         most_different_pairwise=most_different_pairwise,
         most_similar_pairwise=most_similar_pairwise,
         biggest_pct_gap_pairwise=biggest_pct_gap_pairwise,
+        highlights=[],
     )
+    lists.highlights = _build_highlights(lists)
+    return lists
 
 
 # ---------------------------------------------------------------------------
