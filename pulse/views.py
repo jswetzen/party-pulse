@@ -7,6 +7,8 @@ from django.views.decorators.http import require_POST
 from .aggregations import compute_breakdown
 from .forms import RespondentForm
 from .models import BigScreenState, Question, Respondent, Response
+from .qr import render_qr_svg
+from .suggestions import compute_suggestions
 
 # ---------------------------------------------------------------------------
 # Guest app ("/") — identity is a UUID in the URL, not a server session; the
@@ -112,6 +114,16 @@ def suggest_question(request, respondent_id):
     return render(request, "pulse/_suggestion_form.html", {"submitted": bool(text), "respondent": respondent})
 
 
+def qr_sign(request):
+    # Unauthenticated like screen_display() below -- this is a poster/signage view meant
+    # to be pulled up on a lobby TV or printed and taped to a wall, not something only the
+    # host should reach. build_absolute_uri points at "/" (identity_picker), the actual
+    # guest entry point, and picks up the right scheme via SECURE_PROXY_SSL_HEADER
+    # (settings.py) so the QR still encodes https:// behind the reverse proxy.
+    guest_url = request.build_absolute_uri("/")
+    return render(request, "pulse/qr_sign.html", {"guest_url": guest_url, "qr_svg": render_qr_svg(guest_url)})
+
+
 # ---------------------------------------------------------------------------
 # Host console ("/host") — gated by Django's regular auth (one shared
 # operator account, created with `manage.py createsuperuser`). Not
@@ -150,10 +162,35 @@ def screen_control(request):
         return redirect("host-screen-control")
 
     live_questions = Question.objects.filter(status=Question.Status.LIVE)
+
+    # "Interesting stats" suggestion cards (see pulse/suggestions.py) link back to this
+    # same page with ?question=&breakdown= to pre-fill the form below -- never a new
+    # reveal path, and never touching `state`/the singleton itself, since only a POST
+    # (the host's own explicit "show"/"reveal" click) persists anything. Falls back to
+    # the persisted state's own question/breakdown when no suggestion was clicked, or
+    # when the query params are missing/invalid (e.g. a stale link to an archived
+    # question no longer in live_questions).
+    prefill_question_id = state.question_id
+    question_param = request.GET.get("question")
+    if question_param:
+        try:
+            candidate_id = int(question_param)
+        except ValueError:
+            candidate_id = None
+        if candidate_id is not None and live_questions.filter(id=candidate_id).exists():
+            prefill_question_id = candidate_id
+    prefill_breakdown = request.GET.get("breakdown") or state.breakdown
+
     return render(
         request,
         "pulse/screen_control.html",
-        {"state": state, "live_questions": live_questions},
+        {
+            "state": state,
+            "live_questions": live_questions,
+            "prefill_question_id": prefill_question_id,
+            "prefill_breakdown": prefill_breakdown,
+            "suggestions": compute_suggestions(),
+        },
     )
 
 

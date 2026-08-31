@@ -1,9 +1,11 @@
 import uuid
 
 import pytest
+from django.contrib.auth.models import User
 
 from pulse.aggregations import compute_breakdown
 from pulse.models import BigScreenState, Question, Respondent, Response
+from pulse.qr import render_qr_svg
 
 pytestmark = pytest.mark.django_db
 
@@ -84,3 +86,79 @@ def test_age_stat_by_side_end_to_end(client):
 
     overall_max = compute_breakdown(question, BigScreenState.Breakdown.OVERALL, aggregation=BigScreenState.Aggregation.MAX)
     assert overall_max["Alla"]["value"] == 50
+
+
+# ---------------------------------------------------------------------------
+# screen_control() suggestion-card prefill (see pulse/suggestions.py) -- clicking a
+# suggestion must only pre-select the form's fields, never touch the persisted
+# BigScreenState/reveal itself. Only a POST (the host's own explicit click) may do that.
+# ---------------------------------------------------------------------------
+
+
+def _login_host(client):
+    User.objects.create_user("host", password="pw")
+    client.login(username="host", password="pw")
+
+
+def test_screen_control_get_prefills_from_query_params_without_persisting(client):
+    _login_host(client)
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    state = BigScreenState.load()
+    state.breakdown = BigScreenState.Breakdown.OVERALL
+    state.save()
+
+    response = client.get(f"/host/screen/?question={question.id}&breakdown=side")
+
+    assert response.status_code == 200
+    assert response.context["prefill_question_id"] == question.id
+    assert response.context["prefill_breakdown"] == "side"
+    # The GET must not have written anything back to the singleton state.
+    state.refresh_from_db()
+    assert state.question_id is None
+    assert state.breakdown == BigScreenState.Breakdown.OVERALL
+
+
+def test_screen_control_get_ignores_invalid_question_param(client):
+    _login_host(client)
+    # No live question at all with this id -- an old/stale suggestion link, or a question
+    # that has since been archived.
+    response = client.get("/host/screen/?question=999999&breakdown=side")
+
+    assert response.status_code == 200
+    assert response.context["prefill_question_id"] is None
+
+
+def test_screen_control_get_without_query_params_falls_back_to_persisted_state(client):
+    _login_host(client)
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    state = BigScreenState.load()
+    state.question = question
+    state.breakdown = BigScreenState.Breakdown.SEX
+    state.save()
+
+    response = client.get("/host/screen/")
+
+    assert response.context["prefill_question_id"] == question.id
+    assert response.context["prefill_breakdown"] == BigScreenState.Breakdown.SEX
+
+
+# ---------------------------------------------------------------------------
+# QR sign ("/qr/") -- unauthenticated signage page, see qr_sign() in views.py.
+# ---------------------------------------------------------------------------
+
+
+def test_qr_sign_is_reachable_without_login(client):
+    response = client.get("/qr/")
+
+    assert response.status_code == 200
+    assert b"<svg" in response.content
+
+
+def test_qr_sign_encodes_the_guest_entry_url(client, settings):
+    settings.ALLOWED_HOSTS = ["party.example.com"]
+
+    response = client.get("/qr/", SERVER_NAME="party.example.com")
+
+    guest_url = response.context["guest_url"]
+    assert guest_url == "http://party.example.com/"
+    assert response.context["qr_svg"] == render_qr_svg(guest_url)
