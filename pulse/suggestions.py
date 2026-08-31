@@ -36,7 +36,7 @@ handling in views.screen_control) -- still requires the host's own explicit
 Scoring is a pluggable strategy (see SCORING_STRATEGIES at the bottom) -- add a sibling
 scoring function with the same (question, label_a, values_a, label_b, values_b) ->
 (score, blurb) | None signature and register it there to add a mode; nothing else in this
-module needs to change (_score_pool() feeds it both vs-overall pairs -- always with
+module needs to change (_score_pools() feeds it both vs-overall pairs -- always with
 label_b="totalt", values_b=the question's overall values -- and genuine pairwise pairs from
 the same per-breakdown group scan, so compute_suggestions() decides which strategies feed
 which lists, same as before)."""
@@ -56,11 +56,11 @@ from .models import BigScreenState, Question, Response
 # answer swings a group's percentage by 20+ points, so it's flagged `is_small_sample` for
 # a caveat badge rather than presented with the same confidence as a larger group's score.
 # For a pairwise finding this applies to EACH side independently -- a pair is flagged if
-# either group is below the threshold, not only when both are (see _score_pool below).
+# either group is below the threshold, not only when both are (see _score_pools below).
 MIN_SAMPLE_SIZE = 5
 
 # How many entries each ranked list surfaces (5 per list, not 5 total). Recomputed on
-# every host-console page load (no caching, no background job) -- see _score_pool()'s
+# every host-console page load (no caching, no background job) -- see _score_pools()'s
 # docstring for why that's cheap enough at this app's actual scale (PLAN.md: 39 seeded
 # questions, wedding-guest-list response counts) even with pairwise comparisons added.
 TOP_N = 5
@@ -77,7 +77,7 @@ _BREAKDOWN_LABELS = dict(BigScreenState.Breakdown.choices)
 # Sentinel passed as a pairwise function's `label_b` to mean "the overall respondent pool
 # for this question", not an actual second group. Every vs-overall Suggestion is produced
 # by the exact same scoring functions as a pairwise one, just called with this as label_b
-# and the question's overall values as values_b -- see _score_pool().
+# and the question's overall values as values_b -- see _score_pools().
 _OVERALL = "totalt"
 
 
@@ -103,6 +103,42 @@ def _n_phrase(label_b: str, n_a: int, n_b: int) -> str:
     called out every time); a genuine pairwise comparison names both, since either side can
     independently be a small sample (see MIN_SAMPLE_SIZE above)."""
     return f"(n={n_a})" if label_b == _OVERALL else f"(n={n_a} vs {n_b})"
+
+
+# The three blurb wordings below are each shared by an effect_size/simple_pct_gap function
+# pair for the same question type (e.g. _boolean_effect_size and _pct_gap_boolean): both
+# strategies display the exact same underlying values (yes-rates, an MC option's share, or
+# a mean) for the same finding, they just score that finding differently. Keeping one
+# wording per shape here means a phrasing tweak lands in both "Mest olika" and "Störst
+# procentskillnad" (and their pairwise counterparts) at once, instead of needing to be
+# copied in sync across six call sites.
+
+
+def _percentage_blurb(label_a: str, pct_a: float, label_b: str, pct_b: float, n_a: int, n_b: int) -> str:
+    """Shared wording for a boolean finding -- e.g. "Bland kvinnor svarade 62% ja, jämfört
+    med 40% totalt (n=6)." `pct_a`/`pct_b` are already 0-100, not 0-1."""
+    return (
+        f"Bland {label_a} svarade {_sv_number(pct_a)}% ja, "
+        f"jämfört med {_sv_number(pct_b)}% {_vs_phrase(label_b)} {_n_phrase(label_b, n_a, n_b)}."
+    )
+
+
+def _mc_option_blurb(label_a: str, option: str, pct_a: float, label_b: str, pct_b: float, n_a: int, n_b: int) -> str:
+    """Shared wording for a multiple-choice finding, naming one specific option's share on
+    each side -- e.g. "Bland kvinnor svarade 80% "Vin", jämfört med 45% totalt (n=6)"."""
+    return (
+        f"Bland {label_a} svarade {_sv_number(pct_a)}% “{option}”, "
+        f"jämfört med {_sv_number(pct_b)}% {_vs_phrase(label_b)} {_n_phrase(label_b, n_a, n_b)}."
+    )
+
+
+def _mean_blurb(label_a: str, mean_a: float, label_b: str, mean_b: float, n_a: int, n_b: int) -> str:
+    """Shared wording for a number finding -- e.g. "Bland kvinnor var snittet 3,2, jämfört
+    med 2,8 totalt (n=6)"."""
+    return (
+        f"Bland {label_a} var snittet {_sv_number(mean_a)}, "
+        f"jämfört med {_sv_number(mean_b)} {_vs_phrase(label_b)} {_n_phrase(label_b, n_a, n_b)}."
+    )
 
 
 @dataclass
@@ -226,30 +262,37 @@ def _question_has_no_signal(question: Question, overall_values: list) -> bool:
     return False
 
 
-def _score_pool(scoring: str) -> tuple[list[Suggestion], list[PairwiseSuggestion]]:
-    """The full, unsorted, unsliced candidate pools for one scoring strategy: every live,
-    non-system question x every non-overall breakdown x every group (vs-overall pool), AND
-    x every unordered pair of groups within that breakdown (pairwise pool) -- both scored by
-    `scoring`. compute_suggestions() calls this once per strategy it needs and slices/sorts
-    each of the two pools it returns.
+def _score_pools() -> dict[str, tuple[list[Suggestion], list[PairwiseSuggestion]]]:
+    """The full, unsorted, unsliced candidate pools for EVERY registered scoring strategy at
+    once: every live, non-system question x every non-overall breakdown x every group
+    (vs-overall pool), AND x every unordered pair of groups within that breakdown (pairwise
+    pool) -- scored by every strategy in SCORING_STRATEGIES in a single traversal. Returns
+    {strategy_name: (vs_overall_pool, pairwise_pool)}; compute_suggestions() calls this once
+    and slices/sorts the pools it needs out of the result.
 
-    Pairwise piggybacks on the exact same per-question Response query and per-breakdown
-    _group() call already needed for the vs-overall pool -- no extra database queries, just
-    extra in-memory arithmetic over group_values, a dict already built while computing the
-    vs-overall pool. At this app's real scale (PLAN.md: 39 seeded questions, single-digit
-    groups per breakdown -- sex has 2 groups/1 pair, side and relation typically 2-3
-    groups/1-3 pairs, age up to 5 groups/10 pairs) that's at most a few dozen extra scored
-    pairs per question, not the group count squared across the *whole* app: pairs are only
-    ever formed within one breakdown's own groups, and age -- the one dimension with more
-    than 2-3 groups -- tops out at C(5,2)=10 pairs, cheap even run twice (once per scoring
-    strategy). Measured with pulse/management/commands/seed_demo_data.py's 39-question/
-    150-respondent dataset: compute_suggestions() before pairwise support and after are both
-    comfortably sub-100ms (see PLAN.md for the measured numbers), i.e. pairwise support adds
-    no perceptible page-load cost at this app's scale."""
-    score_fn = SCORING_STRATEGIES[scoring]
+    Scored by every strategy in one pass rather than one call per strategy: each strategy
+    needs the exact same per-question Response query and per-breakdown _group() call, so
+    re-walking the DB and re-grouping per strategy would just repeat that fetch for no new
+    information -- every strategy is instead applied to the same in-memory `values`/
+    `group_values` while they're already in hand, one extra score_fn(...) call per
+    (question, group) or (question, pair), no extra query.
+
+    Pairwise similarly piggybacks on the exact same per-question Response query and
+    per-breakdown _group() call already needed for the vs-overall pool -- no extra database
+    queries, just extra in-memory arithmetic over group_values, a dict already built while
+    computing the vs-overall pool. At this app's real scale (PLAN.md: 39 seeded questions,
+    single-digit groups per breakdown -- sex has 2 groups/1 pair, side and relation
+    typically 2-3 groups/1-3 pairs, age up to 5 groups/10 pairs) that's at most a few dozen
+    extra scored pairs per question, not the group count squared across the *whole* app:
+    pairs are only ever formed within one breakdown's own groups, and age -- the one
+    dimension with more than 2-3 groups -- tops out at C(5,2)=10 pairs, cheap even across
+    every registered strategy. Measured with pulse/management/commands/seed_demo_data.py's
+    39-question/150-respondent dataset: compute_suggestions() took ~320-400ms before
+    pairwise support and ~345-355ms after (see PLAN.md for the full measurement), i.e.
+    pairwise support adds no perceptible page-load cost at this app's scale."""
     questions = Question.objects.filter(status=Question.Status.LIVE, is_system=False)
-    vs_overall: list[Suggestion] = []
-    pairwise: list[PairwiseSuggestion] = []
+    vs_overall: dict[str, list[Suggestion]] = {name: [] for name in SCORING_STRATEGIES}
+    pairwise: dict[str, list[PairwiseSuggestion]] = {name: [] for name in SCORING_STRATEGIES}
     for question in questions:
         responses = list(Response.objects.filter(question=question).select_related("respondent"))
         overall_values = [r.answer["value"] for r in responses]
@@ -265,51 +308,53 @@ def _score_pool(scoring: str) -> tuple[list[Suggestion], list[PairwiseSuggestion
                 if not values:
                     continue
                 group_values[group_label] = values
-                scored = score_fn(question, group_label, values, _OVERALL, overall_values)
-                if scored is None:
-                    continue
-                score, blurb = scored
-                vs_overall.append(
-                    Suggestion(
-                        question_id=question.id,
-                        question_text=question.text_sv,
-                        breakdown=breakdown,
-                        breakdown_label=_BREAKDOWN_LABELS[breakdown],
-                        group_label=group_label,
-                        sample_size=len(values),
-                        score=score,
-                        score_display=_score_display(scoring, question.type, score),
-                        is_small_sample=len(values) < MIN_SAMPLE_SIZE,
-                        blurb=blurb,
+                for scoring, score_fn in SCORING_STRATEGIES.items():
+                    scored = score_fn(question, group_label, values, _OVERALL, overall_values)
+                    if scored is None:
+                        continue
+                    score, blurb = scored
+                    vs_overall[scoring].append(
+                        Suggestion(
+                            question_id=question.id,
+                            question_text=question.text_sv,
+                            breakdown=breakdown,
+                            breakdown_label=_BREAKDOWN_LABELS[breakdown],
+                            group_label=group_label,
+                            sample_size=len(values),
+                            score=score,
+                            score_display=_score_display(scoring, question.type, score),
+                            is_small_sample=len(values) < MIN_SAMPLE_SIZE,
+                            blurb=blurb,
+                        )
                     )
-                )
             # Every unordered pair of groups actually present in this breakdown for this
             # question -- e.g. sex gives at most one pair ("kvinnor" vs "män"), age up to
             # ten (see docstring above). group_values only holds groups with >=1 response
             # (built in the loop above), so a group nobody in this breakdown answered
             # simply can't form a pair.
             for (label_a, values_a), (label_b, values_b) in itertools.combinations(group_values.items(), 2):
-                scored = score_fn(question, label_a, values_a, label_b, values_b)
-                if scored is None:
-                    continue
-                score, blurb = scored
-                pairwise.append(
-                    PairwiseSuggestion(
-                        question_id=question.id,
-                        question_text=question.text_sv,
-                        breakdown=breakdown,
-                        breakdown_label=_BREAKDOWN_LABELS[breakdown],
-                        group_a_label=label_a,
-                        group_b_label=label_b,
-                        sample_size_a=len(values_a),
-                        sample_size_b=len(values_b),
-                        score=score,
-                        score_display=_score_display(scoring, question.type, score),
-                        is_small_sample=len(values_a) < MIN_SAMPLE_SIZE or len(values_b) < MIN_SAMPLE_SIZE,
-                        blurb=blurb,
+                for scoring, score_fn in SCORING_STRATEGIES.items():
+                    scored = score_fn(question, label_a, values_a, label_b, values_b)
+                    if scored is None:
+                        continue
+                    score, blurb = scored
+                    pairwise[scoring].append(
+                        PairwiseSuggestion(
+                            question_id=question.id,
+                            question_text=question.text_sv,
+                            breakdown=breakdown,
+                            breakdown_label=_BREAKDOWN_LABELS[breakdown],
+                            group_a_label=label_a,
+                            group_b_label=label_b,
+                            sample_size_a=len(values_a),
+                            sample_size_b=len(values_b),
+                            score=score,
+                            score_display=_score_display(scoring, question.type, score),
+                            is_small_sample=len(values_a) < MIN_SAMPLE_SIZE or len(values_b) < MIN_SAMPLE_SIZE,
+                            blurb=blurb,
+                        )
                     )
-                )
-    return vs_overall, pairwise
+    return {name: (vs_overall[name], pairwise[name]) for name in SCORING_STRATEGIES}
 
 
 # How many entries the combined "top 10, all categories" panel surfaces (Johan's decision,
@@ -351,7 +396,7 @@ def _highlight_identity(item, is_pairwise: bool):
     `most_different[0]`. Either way the combined top-10 should show that finding once, not
     twice under two labels. Pairwise identity uses a frozenset of the two group labels so
     swapping which side landed in group_a/group_b (an itertools.combinations incidental, per
-    _score_pool) doesn't produce a false non-duplicate."""
+    _score_pools) doesn't produce a false non-duplicate."""
     if is_pairwise:
         return (item.question_id, item.breakdown, frozenset({item.group_a_label, item.group_b_label}))
     return (item.question_id, item.breakdown, item.group_label)
@@ -455,7 +500,8 @@ def compute_suggestions(top_n: int = TOP_N) -> SuggestionLists:
     and bottom 5 overlap in 4 of 5 slots. That's just what "most extreme" and "least
     extreme" mean when there's barely anything to rank; nothing special-cases it, the same
     way PLAN.md's original single-list design never needed to."""
-    effect_size_pool, effect_size_pairwise_pool = _score_pool("effect_size")
+    pools = _score_pools()
+    effect_size_pool, effect_size_pairwise_pool = pools["effect_size"]
     effect_size_pool.sort(key=lambda s: abs(s.score), reverse=True)
     most_different = effect_size_pool[:top_n]
     most_similar = list(reversed(effect_size_pool))[:top_n]  # same pool, opposite (ascending |score|) tail
@@ -464,7 +510,7 @@ def compute_suggestions(top_n: int = TOP_N) -> SuggestionLists:
     most_different_pairwise = effect_size_pairwise_pool[:top_n]
     most_similar_pairwise = list(reversed(effect_size_pairwise_pool))[:top_n]
 
-    pct_gap_pool, pct_gap_pairwise_pool = _score_pool("simple_pct_gap")
+    pct_gap_pool, pct_gap_pairwise_pool = pools["simple_pct_gap"]
     pct_gap_pool.sort(key=lambda s: abs(s.score), reverse=True)
     biggest_pct_gap = pct_gap_pool[:top_n]
 
@@ -491,7 +537,7 @@ def compute_suggestions(top_n: int = TOP_N) -> SuggestionLists:
 # function branching on type" pattern rather than type-specific duplication or
 # a class hierarchy. Each function takes two arbitrary (label, values) sides --
 # label_b/values_b is the question's overall pool for a vs-overall finding
-# (label_b == _OVERALL, guaranteed by _score_pool), or a genuine second group
+# (label_b == _OVERALL, guaranteed by _score_pools), or a genuine second group
 # for a pairwise finding. Nothing here needs to know which case it's in except
 # where the *math* itself must differ (see _number_effect_size) -- the blurb
 # wording difference is handled once, by _vs_phrase/_n_phrase above.
@@ -513,10 +559,7 @@ def _boolean_effect_size(label_a: str, values_a: list[bool], label_b: str, value
     p_a = sum(values_a) / len(values_a)
     p_b = sum(values_b) / len(values_b)
     h = 2 * math.asin(math.sqrt(p_a)) - 2 * math.asin(math.sqrt(p_b))
-    blurb = (
-        f"Bland {label_a} svarade {_sv_number(100 * p_a)}% ja, "
-        f"jämfört med {_sv_number(100 * p_b)}% {_vs_phrase(label_b)} {_n_phrase(label_b, len(values_a), len(values_b))}."
-    )
+    blurb = _percentage_blurb(label_a, 100 * p_a, label_b, 100 * p_b, len(values_a), len(values_b))
     return h, blurb
 
 
@@ -543,10 +586,7 @@ def _multiple_choice_effect_size(question: Question, label_a: str, values_a: lis
     biggest_opt = max(gaps, key=lambda opt: abs(gaps[opt]))
     pct_a = 100 * counts_a.get(biggest_opt, 0) / n_a
     pct_b = 100 * counts_b.get(biggest_opt, 0) / n_b
-    blurb = (
-        f"Bland {label_a} svarade {_sv_number(pct_a)}% “{biggest_opt}”, "
-        f"jämfört med {_sv_number(pct_b)}% {_vs_phrase(label_b)} {_n_phrase(label_b, n_a, n_b)}."
-    )
+    blurb = _mc_option_blurb(label_a, biggest_opt, pct_a, label_b, pct_b, n_a, n_b)
     return tvd, blurb
 
 
@@ -561,7 +601,7 @@ def _number_effect_size(label_a: str, values_a: list[float], label_b: str, value
     For a genuine pairwise (group_a, group_b) finding there's no single natural "the"
     population to standardize against anymore, and dividing by one side's own stdev would
     make |score| -- and therefore the ranked position -- depend on which of the two groups
-    happened to land in `values_b` (see _score_pool's itertools.combinations, whose pair
+    happened to land in `values_b` (see _score_pools's itertools.combinations, whose pair
     order is incidental, not meaningful). So pairwise instead divides by a size-weighted
     POOLED population variance across both groups (Cohen's d's usual construction), which
     is symmetric under swapping a and b -- the ranking doesn't depend on an arbitrary
@@ -580,10 +620,7 @@ def _number_effect_size(label_a: str, values_a: list[float], label_b: str, value
         # case where two specific small groups both happen to have zero internal spread.
         return None
     score = (mean_a - mean_b) / spread
-    blurb = (
-        f"Bland {label_a} var snittet {_sv_number(mean_a)}, "
-        f"jämfört med {_sv_number(mean_b)} {_vs_phrase(label_b)} {_n_phrase(label_b, len(values_a), len(values_b))}."
-    )
+    blurb = _mean_blurb(label_a, mean_a, label_b, mean_b, len(values_a), len(values_b))
     return score, blurb
 
 
@@ -614,10 +651,7 @@ def _pct_gap_boolean(label_a: str, values_a: list[bool], label_b: str, values_b:
     p_a = sum(values_a) / len(values_a)
     p_b = sum(values_b) / len(values_b)
     gap = abs(100 * p_a - 100 * p_b)
-    blurb = (
-        f"Bland {label_a} svarade {_sv_number(100 * p_a)}% ja, "
-        f"jämfört med {_sv_number(100 * p_b)}% {_vs_phrase(label_b)} {_n_phrase(label_b, len(values_a), len(values_b))}."
-    )
+    blurb = _percentage_blurb(label_a, 100 * p_a, label_b, 100 * p_b, len(values_a), len(values_b))
     return gap, blurb
 
 
@@ -637,10 +671,7 @@ def _pct_gap_multiple_choice(question: Question, label_a: str, values_a: list[st
     gap = gaps[biggest_opt]
     pct_a = 100 * counts_a.get(biggest_opt, 0) / n_a
     pct_b = 100 * counts_b.get(biggest_opt, 0) / n_b
-    blurb = (
-        f"Bland {label_a} svarade {_sv_number(pct_a)}% “{biggest_opt}”, "
-        f"jämfört med {_sv_number(pct_b)}% {_vs_phrase(label_b)} {_n_phrase(label_b, n_a, n_b)}."
-    )
+    blurb = _mc_option_blurb(label_a, biggest_opt, pct_a, label_b, pct_b, n_a, n_b)
     return gap, blurb
 
 
@@ -654,10 +685,7 @@ def _pct_gap_number(label_a: str, values_a: list[float], label_b: str, values_b:
     mean_a = statistics.mean(values_a)
     mean_b = statistics.mean(values_b)
     diff = mean_a - mean_b
-    blurb = (
-        f"Bland {label_a} var snittet {_sv_number(mean_a)}, "
-        f"jämfört med {_sv_number(mean_b)} {_vs_phrase(label_b)} {_n_phrase(label_b, len(values_a), len(values_b))}."
-    )
+    blurb = _mean_blurb(label_a, mean_a, label_b, mean_b, len(values_a), len(values_b))
     return diff, blurb
 
 
@@ -671,13 +699,13 @@ def _simple_pct_gap_score(question: Question, label_a: str, values_a: list, labe
     raise ValueError(f"unknown question type: {question.type}")
 
 
-# Registry of swappable scoring strategies, keyed by name and consumed by _score_pool()
+# Registry of swappable scoring strategies, keyed by name and consumed by _score_pools()
 # via compute_suggestions(). Both slots are shared by vs-overall and pairwise findings
 # alike (PLAN.md decision to keep this pluggable): "effect_size" feeds "Mest olika"/"Mest
 # lika" and their pairwise counterparts, "simple_pct_gap" feeds "Störst procentskillnad" and
 # its pairwise counterpart. Add a sibling scoring function with the same (question,
 # label_a, values_a, label_b, values_b) -> (score, blurb) | None signature and register it
-# here to add a mode -- _score_pool() itself needs no changes.
+# here to add a mode -- _score_pools() itself needs no changes.
 SCORING_STRATEGIES = {
     "effect_size": _effect_size_score,
     "simple_pct_gap": _simple_pct_gap_score,
