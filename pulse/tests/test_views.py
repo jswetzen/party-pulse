@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 
 from pulse.aggregations import compute_breakdown
 from pulse.models import BigScreenState, Question, Respondent, Response
+from pulse.qr import render_qr_svg
 
 pytestmark = pytest.mark.django_db
 
@@ -139,3 +140,25 @@ def test_screen_control_get_without_query_params_falls_back_to_persisted_state(c
 
     assert response.context["prefill_question_id"] == question.id
     assert response.context["prefill_breakdown"] == BigScreenState.Breakdown.SEX
+
+
+# ---------------------------------------------------------------------------
+# QR sign ("/qr/") -- unauthenticated signage page, see qr_sign() in views.py.
+# ---------------------------------------------------------------------------
+
+
+def test_qr_sign_is_reachable_without_login(client):
+    response = client.get("/qr/")
+
+    assert response.status_code == 200
+    assert b"<svg" in response.content
+
+
+def test_qr_sign_encodes_the_guest_entry_url(client, settings):
+    settings.ALLOWED_HOSTS = ["party.example.com"]
+
+    response = client.get("/qr/", SERVER_NAME="party.example.com")
+
+    guest_url = response.context["guest_url"]
+    assert guest_url == "http://party.example.com/"
+    assert response.context["qr_svg"] == render_qr_svg(guest_url)

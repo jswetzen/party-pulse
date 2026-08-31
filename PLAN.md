@@ -107,6 +107,12 @@ Implemented in `pulse/models.py`:
   `/screen/state/` every 2s via htmx (`hx-trigger="every 2s"` — explicitly chosen over
   websockets/SSE, "start simple with polling"), renders question first with no stats, then on
   reveal shows the statistic per chosen breakdown/aggregation.
+- **Guest entry QR sign** (`/qr/`): unauthenticated static signage page — QR code (server-rendered
+  SVG, `pulse/qr.py`) pointing at `/`, plus playful Swedish copy, meant to be pulled up on a lobby
+  screen or printed and taped up. Linked from the host console's nav grid. Same dark party palette
+  on screen; `@media print` swaps to plain white/ink so a printed copy doesn't try to lay down a
+  full-bleed dark background. Deliberately no htmx/live state — it's a static poster, not a view
+  onto anything that changes during the party.
 
 ## Reveal semantics
 

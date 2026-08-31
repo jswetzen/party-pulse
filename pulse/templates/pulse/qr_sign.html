@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skanna in — Party Pulse</title>
+  <link rel="stylesheet" href="{% static 'pulse/style.css' %}">
+</head>
+<body>
+  <div class="qr-sign">
+    <p class="wordmark">Party<span>Pulse</span></p>
+
+    <h1 class="qr-sign__headline">Skanna &amp; spela med!</h1>
+    <p class="qr-sign__sub">
+      Svara på några snabba, lite kluriga frågor om dig själv — helt anonymt, tar en minut.
+      Svaren blir till en bild av oss alla här, som dyker upp på storbild under kvällen.
+    </p>
+
+    <div class="qr-sign__card">
+      {{ qr_svg|safe }}
+    </div>
+
+    <p class="qr-sign__url">{{ guest_url }}</p>
+    <p class="qr-sign__footnote">Fungerar hela kvällen — hoppa in när du vill och svara på så många frågor du orkar.</p>
+
+    <button type="button" class="btn secondary qr-sign__print-btn" onclick="window.print()">Skriv ut</button>
+  </div>
+</body>
+</html>

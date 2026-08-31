@@ -7,6 +7,7 @@ from django.views.decorators.http import require_POST
 from .aggregations import compute_breakdown
 from .forms import RespondentForm
 from .models import BigScreenState, Question, Respondent, Response
+from .qr import render_qr_svg
 from .suggestions import compute_suggestions
 
 # ---------------------------------------------------------------------------
@@ -111,6 +112,16 @@ def suggest_question(request, respondent_id):
             suggestion_review_status=Question.SuggestionReviewStatus.PENDING,
         )
     return render(request, "pulse/_suggestion_form.html", {"submitted": bool(text), "respondent": respondent})
+
+
+def qr_sign(request):
+    # Unauthenticated like screen_display() below -- this is a poster/signage view meant
+    # to be pulled up on a lobby TV or printed and taped to a wall, not something only the
+    # host should reach. build_absolute_uri points at "/" (identity_picker), the actual
+    # guest entry point, and picks up the right scheme via SECURE_PROXY_SSL_HEADER
+    # (settings.py) so the QR still encodes https:// behind the reverse proxy.
+    guest_url = request.build_absolute_uri("/")
+    return render(request, "pulse/qr_sign.html", {"guest_url": guest_url, "qr_svg": render_qr_svg(guest_url)})
 
 
 # ---------------------------------------------------------------------------

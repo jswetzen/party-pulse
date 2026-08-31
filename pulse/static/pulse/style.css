@@ -546,3 +546,79 @@ form.htmx-request .choice__dot {
   padding: 0.6rem 0;
 }
 .suggestions__all summary:hover { color: var(--gold); }
+
+/* QR sign ("/qr/") -------------------------------------------------------
+   Standalone poster, not extending base.html/.page -- pulled up full-bleed
+   on a lobby TV or printed and taped to a wall (pulse/views.py's qr_sign(),
+   see PLAN.md "Guest entry QR sign"), so it needs its own centered layout
+   rather than the article-width .page column every other route uses.
+   On-screen it's the same after-dark party palette as .screen; @media
+   print swaps to plain white/ink so a printed copy doesn't try to lay down
+   a full-bleed dark background in a home printer (wasted toner, and most
+   browsers don't even print background colors by default) -- everything
+   below only re-points colors for that swap, the layout itself is shared. */
+.qr-sign {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 1.1rem;
+  padding: 6vh 6vw;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(225, 90, 122, 0.16), transparent 60%),
+    var(--ink);
+}
+.qr-sign .wordmark { font-size: 1.3rem; }
+.qr-sign__headline {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  max-width: 30rem;
+}
+.qr-sign__sub {
+  max-width: 28rem;
+  margin: -0.4rem 0 0.6rem;
+  color: var(--mist);
+  font-size: clamp(1rem, 1.6vw, 1.15rem);
+}
+
+/* White card is deliberate even against the dark on-screen background --
+   see pulse/qr.py's render_qr_svg(): the code itself is plain black
+   modules with no background rect, so it needs real light behind it for a
+   phone camera to read it at all, on-screen or on paper. */
+.qr-sign__card {
+  background: var(--cream);
+  border-radius: 1.2rem;
+  padding: 1.4rem;
+  box-shadow: 0 0.6rem 2.5rem rgba(0, 0, 0, 0.35);
+}
+.qr-sign__card svg {
+  display: block;
+  width: min(60vw, 20rem);
+  height: min(60vw, 20rem);
+}
+
+.qr-sign__url {
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: clamp(1.1rem, 2.2vw, 1.4rem);
+  color: var(--gold);
+  word-break: break-all;
+}
+.qr-sign__footnote {
+  max-width: 26rem;
+  margin: -0.6rem 0 0;
+  font-size: 0.85rem;
+  color: var(--mist);
+}
+.qr-sign__print-btn { margin-top: 0.8rem; }
+
+@media print {
+  .qr-sign { background: #fff; color: #000; min-height: 0; gap: 0.8rem; }
+  .qr-sign .wordmark, .qr-sign .wordmark span { color: #000; }
+  .qr-sign__headline { color: #000; }
+  .qr-sign__sub, .qr-sign__footnote { color: #333; }
+  .qr-sign__card { box-shadow: none; border: 1px solid #ccc; }
+  .qr-sign__url { color: #000; }
+  .qr-sign__print-btn { display: none; }
+}

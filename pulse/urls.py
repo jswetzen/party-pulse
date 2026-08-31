@@ -10,6 +10,8 @@ urlpatterns = [
     path("r/<uuid:respondent_id>/", views.questionnaire, name="questionnaire"),
     path("r/<uuid:respondent_id>/answer/<int:question_id>/", views.answer_question, name="answer-question"),
     path("r/<uuid:respondent_id>/suggest/", views.suggest_question, name="suggest-question"),
+    # Signage — printable/big-screen QR sign pointing guests at "/"
+    path("qr/", views.qr_sign, name="qr-sign"),
     # Host console
     path("host/login/", auth_views.LoginView.as_view(template_name="pulse/host_login.html"), name="host-login"),
     path("host/logout/", auth_views.LogoutView.as_view(next_page="host-login"), name="host-logout"),
