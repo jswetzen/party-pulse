@@ -613,12 +613,18 @@ form.htmx-request .choice__dot {
 }
 .qr-sign__print-btn { margin-top: 0.8rem; }
 
+/* Poster-style print: keep the actual on-screen look (dark background, gold
+   accents, card shadow) instead of flattening to black-on-white, since this
+   sign is meant to be printed and put up as-is, not read off paper economically.
+   Browsers omit backgrounds by default when printing, so print-color-adjust
+   is what makes that dark background actually come out of the printer. */
 @media print {
-  .qr-sign { background: #fff; color: #000; min-height: 0; gap: 0.8rem; }
-  .qr-sign .wordmark, .qr-sign .wordmark span { color: #000; }
-  .qr-sign__headline { color: #000; }
-  .qr-sign__sub, .qr-sign__footnote { color: #333; }
-  .qr-sign__card { box-shadow: none; border: 1px solid #ccc; }
-  .qr-sign__url { color: #000; }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  @page { margin: 0; }
+  .qr-sign { min-height: 100vh; }
   .qr-sign__print-btn { display: none; }
 }
