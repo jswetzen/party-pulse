@@ -308,16 +308,23 @@ form.htmx-request .choice__dot {
     var(--ink);
 }
 
+/* Font sizes below were `clamp(min, Nvw, max)` -- a hard rem ceiling that reads fine on a
+   laptop preview but plateaus well before it should on an actual big screen: on a 4K
+   projector (3840px wide) a `6vw` preferred value is 230px, so the old 5rem/80px max was
+   capping it at a third of what the viewport actually had room for -- confirmed too small
+   on a real 4K projector, 2026-09-01. Dropped the ceiling (`max(min, Nvw)`, i.e. clamp
+   without its top clause) so this keeps growing with viewport width with no upper limit;
+   the min clause still protects small/host-preview windows. */
 .screen-word {
   font-family: var(--font-display);
-  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-size: max(2.5rem, 6vw);
   font-weight: 650;
 }
 .screen-word span { color: var(--rose); }
 
 .screen-question {
   font-family: var(--font-display);
-  font-size: clamp(1.8rem, 4vw, 3.2rem);
+  font-size: max(1.8rem, 4vw);
   font-weight: 650;
   max-width: 46rem;
   margin: 0;
@@ -326,14 +333,16 @@ form.htmx-request .choice__dot {
 .screen .pulse-line { max-width: 48rem; }
 
 .results {
-  width: min(56rem, 90vw);
+  /* was min(56rem, 90vw) -- same ceiling problem as the font sizes above, capping the
+     whole results panel at 896px regardless of screen size. */
+  width: 90vw;
   display: flex;
   flex-direction: column;
   gap: 1.6rem;
 }
 
 .result-group__label {
-  font-size: clamp(0.85rem, 1.3vw, 1.1rem);
+  font-size: max(0.85rem, 1.3vw);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--mist);
@@ -351,7 +360,7 @@ form.htmx-request .choice__dot {
 
 .result-bar-track {
   flex: 1;
-  height: 1.6rem;
+  height: max(1.6rem, 2.2vw);
   background: var(--surface);
   border-radius: 999px;
   overflow: hidden;
@@ -374,7 +383,7 @@ form.htmx-request .choice__dot {
 .result-value {
   font-family: var(--font-display);
   font-weight: 650;
-  font-size: clamp(1.1rem, 2vw, 1.6rem);
+  font-size: max(1.1rem, 2vw);
   color: var(--gold);
   min-width: 4.5ch;
   text-align: right;
@@ -384,7 +393,7 @@ form.htmx-request .choice__dot {
 .result-number {
   font-family: var(--font-display);
   font-weight: 650;
-  font-size: clamp(2.2rem, 6vw, 4rem);
+  font-size: max(2.2rem, 6vw);
   color: var(--gold);
   font-variant-numeric: tabular-nums;
 }

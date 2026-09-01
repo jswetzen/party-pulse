@@ -8,7 +8,7 @@
   {% include "pulse/_pulse_line.html" with animated=True %}
 
 {% else %}
-  <h1 class="screen-question" style="font-size:clamp(1.4rem,2.6vw,2.2rem)">{{ state.question.text_sv }}</h1>
+  <h1 class="screen-question" style="font-size:max(1.4rem,2.6vw)">{{ state.question.text_sv }}</h1>
   {% include "pulse/_pulse_line.html" %}
 
   <div class="results">
@@ -34,7 +34,7 @@
               </div>
               <div class="result-value">{{ pct }}%</div>
             </div>
-            <div style="text-align:left;color:var(--mist);font-size:0.85rem;margin:-0.4rem 0 0.6rem">{{ option }}</div>
+            <div style="text-align:left;color:var(--mist);font-size:max(0.85rem, 1.3vw);margin:-0.4rem 0 0.6rem">{{ option }}</div>
           {% endfor %}
 
         {% elif state.question.type == "number" %}
