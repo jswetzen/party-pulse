@@ -120,6 +120,43 @@ Reveal always means "show the chosen statistic/breakdown" — NEVER an individua
 or answer. Only aggregated group stats are ever shown (`pulse/aggregations.py` only ever returns
 grouped counts/percentages/aggregates, never a `Response` row).
 
+## Big-screen design exploration (2026-09-03/04)
+
+10 radically different visual directions for `/screen/` were drafted (Claude Design canvas, one
+artboard each, seeded with real numbers off the actual reception data) to pick a favorite before
+committing to a redesign: Broadsheet, Highscore, Bouquet, Fika Party, Breaking Pulse, Gauge
+Cluster, Podium, Chalkboard Café, Dansgolvet, Root Terminal. All 10 are also reachable as static,
+frozen-data previews at `/screen/concepts/1/`–`/screen/concepts/10/` (`views.screen_concept`,
+templates under `pulse/templates/pulse/screen_concepts/`) — useful for comparing them on an actual
+device (a design-canvas artboard is awkward on a phone), not wired to `BigScreenState`.
+
+Two were picked to actually implement: **Podium** and **Bouquet**. Neither is a general-purpose
+reskin of the big screen — each is built around one specific data shape, so both ship as
+*selectable per-question reveal styles* (`BigScreenState.style`, chosen live in the host console
+next to breakdown/aggregation) rather than a global theme, gated to the shape they actually fit
+(`views.style_is_compatible`):
+
+- **Podium** ranks a single set of labelled scores as a 1st/2nd/3rd stage plus a supporting list —
+  only a real fit for a multiple-choice question's options at breakdown=Alla (a per-group
+  breakdown would be several separate option distributions, not one ranked list).
+- **Bouquet** shows one ja/nej split as a single two-ended vine — only a real fit for a boolean
+  question at breakdown=Alla (a per-group breakdown would be several splits, a different design).
+
+Picking an incompatible style for the currently revealed question (or revealing before anyone's
+answered) falls back to today's GENERIC bar-chart markup rather than rendering a broken visual —
+enforced server-side in `screen_state()`, mirrored (not duplicated) by a small script in
+`screen_control.html` that just disables the options that would fall back, so the host isn't
+offered a choice that's about to be silently downgraded. See `pulse/views.py`
+(`style_is_compatible`, `_rank_podium`, `_bouquet_geometry`, `screen_state`) and
+`pulse/templates/pulse/screen_styles/`. Covered by `pulse/tests/test_screen_styles.py`.
+
+Not done: the other 8 concepts stay as static previews only, no BigScreenState style for them
+unless one gets picked later; Podium's "rank breakdown groups too" extension (discussed and
+deliberately deferred — see conversation history — since it needs the podium/pillar layout
+reworked for a variable item count, not just a data-source swap) and a per-question default style
+saved on `Question` (so the host doesn't have to repick it live during the reception) are both
+possible follow-ups, not started.
+
 ## Refinements made while scaffolding (gaps in the original idea)
 
 - **Host console auth**: the idea said "simple shared-password gated" without a mechanism.

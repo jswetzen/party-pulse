@@ -1,0 +1,44 @@
+<!doctype html>
+{# Shared shell for the 10 /screen redesign concepts (see PLAN.md "Big-screen design
+   exploration"). Each concept was authored as a fixed 1920x1080 mockup for the design
+   canvas, baked with one frozen real-data snapshot -- not wired to BigScreenState/htmx
+   polling like the live pulse/screen_display.html. This shell just scales that fixed
+   canvas to fit whatever viewport opens it (phone included) via JS-computed
+   transform: scale(), instead of rewriting ten designs' internal CSS to be fluid. #}
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Party Pulse — {{ concept_title }}</title>
+  {% block head_extra %}{% endblock %}
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; }
+    #concept-viewport { width: 100vw; height: 100vh; overflow: hidden; position: relative; }
+    #concept-scale {
+      position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+      transform-origin: top left;
+    }
+  </style>
+</head>
+<body>
+  <div id="concept-viewport">
+    <div id="concept-scale">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+  <script>
+    (function () {
+      var stage = document.getElementById('concept-scale');
+      function fit() {
+        var scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+        stage.style.transform = 'scale(' + scale + ')';
+        stage.style.left = ((window.innerWidth - 1920 * scale) / 2) + 'px';
+        stage.style.top = ((window.innerHeight - 1080 * scale) / 2) + 'px';
+      }
+      window.addEventListener('resize', fit);
+      window.addEventListener('orientationchange', fit);
+      fit();
+    })();
+  </script>
+</body>
+</html>

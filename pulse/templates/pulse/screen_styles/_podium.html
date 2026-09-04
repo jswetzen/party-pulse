@@ -1,0 +1,104 @@
+{% comment %}
+Podium reveal style -- only ever included when views.screen_state() has already confirmed
+style_is_compatible() (multiple_choice, breakdown=OVERALL) AND at least one option has a
+vote (podium_rank1 is never None here). Markup/CSS trace back to the "Podium" concept from
+the 10-screen design exploration (see PLAN.md) -- screen_concepts/screen7_body.html /
+screen7_head.html were the original static, single-snapshot mockup; this is that same
+design made data-driven. Ranks 2/3 are optional (fewer than 3 options answered); ranks 4+
+flow into a flexbox chip row that takes any count gracefully -- see
+views._rank_podium/screen_state.
+{% endcomment %}
+<div class="style-podium">
+  <div class="stage">
+
+    <div class="curtain curtain-left"></div>
+    <div class="curtain curtain-right"></div>
+
+    <div class="beam beam-l"></div>
+    <div class="beam beam-c"></div>
+    <div class="beam beam-r"></div>
+
+    <div class="winner-glow"></div>
+    <div class="floor-glow"></div>
+
+    <div class="vignette"></div>
+
+    <!-- confetti flecks -- decorative, not data-driven -->
+    <div class="confetti" style="left:210px; top:300px; background:#f0c163; transform:rotate(18deg);"></div>
+    <div class="confetti" style="left:1660px; top:330px; background:#adb8c1; transform:rotate(-22deg);"></div>
+    <div class="confetti" style="left:150px; top:520px; background:#a4602f; transform:rotate(40deg);"></div>
+    <div class="confetti" style="left:1740px; top:520px; background:#d9a73b; transform:rotate(-12deg);"></div>
+    <div class="confetti" style="left:260px; top:700px; background:#7c2a52; transform:rotate(-30deg);"></div>
+    <div class="confetti" style="left:1620px; top:700px; background:#c99a2e; transform:rotate(24deg);"></div>
+    <div class="confetti" style="left:110px; top:850px; background:#adb8c1; transform:rotate(8deg);"></div>
+    <div class="confetti" style="left:1780px; top:840px; background:#a4602f; transform:rotate(-18deg);"></div>
+
+    <svg class="spark" style="left:770px; top:340px; animation-delay:0.2s;" width="26" height="26" viewBox="0 0 26 26" fill="none">
+      <path d="M13 0 L15.5 10.5 L26 13 L15.5 15.5 L13 26 L10.5 15.5 L0 13 L10.5 10.5 Z" fill="#f7d98a"></path>
+    </svg>
+    <svg class="spark" style="left:1130px; top:360px; animation-delay:1.1s;" width="20" height="20" viewBox="0 0 26 26" fill="none">
+      <path d="M13 0 L15.5 10.5 L26 13 L15.5 15.5 L13 26 L10.5 15.5 L0 13 L10.5 10.5 Z" fill="#f7d98a"></path>
+    </svg>
+    <svg class="spark" style="left:430px; top:600px; animation-delay:0.6s;" width="18" height="18" viewBox="0 0 26 26" fill="none">
+      <path d="M13 0 L15.5 10.5 L26 13 L15.5 15.5 L13 26 L10.5 15.5 L0 13 L10.5 10.5 Z" fill="#e4eaf0"></path>
+    </svg>
+
+    <!-- header marquee -->
+    <div class="marquee">
+      <div class="bulb-row top"></div>
+      <div class="eyebrow">STORA AVSLÖJANDET</div>
+      <div class="question" style="font-size:{{ podium_question_font_size }}px; white-space:normal;">{{ state.question.text_sv|upper }}</div>
+      <div class="subline"><b>{{ podium_count }} svar</b> &nbsp;&middot;&nbsp; flervalsfråga</div>
+      <div class="bulb-row bottom"></div>
+    </div>
+
+    {% if podium_rank2 %}
+      <!-- podium: 2nd place -->
+      <div class="col" style="left:470px; bottom:480px;">
+        <div class="medal silver-medal">2</div>
+        <div class="name-tag">{{ podium_rank2.label|upper }}</div>
+        <div class="pct">{{ podium_rank2.pct }}%</div>
+      </div>
+      <div class="block silver" style="left:470px; top:620px; height:300px;">
+        <div class="rank-num" style="font-size:160px;">2</div>
+      </div>
+    {% endif %}
+
+    <!-- podium: 1st place -->
+    <div class="col" style="left:810px; bottom:600px;">
+      <div class="medal gold-medal">1</div>
+      <div class="name-tag">{{ podium_rank1.label|upper }}</div>
+      <div class="pct" style="font-size:96px;">{{ podium_rank1.pct }}%</div>
+    </div>
+    <div class="block gold" style="left:810px; top:500px; height:420px;">
+      <div class="rank-num" style="font-size:220px;">1</div>
+    </div>
+
+    {% if podium_rank3 %}
+      <!-- podium: 3rd place -->
+      <div class="col" style="left:1150px; bottom:400px;">
+        <div class="medal bronze-medal">3</div>
+        <div class="name-tag">{{ podium_rank3.label|upper }}</div>
+        <div class="pct">{{ podium_rank3.pct }}%</div>
+      </div>
+      <div class="block bronze" style="left:1150px; top:700px; height:220px;">
+        <div class="rank-num" style="font-size:120px;">3</div>
+      </div>
+    {% endif %}
+
+    {% if podium_rest %}
+      <!-- 4th+ supporting list -->
+      <div class="also-label">ÄVEN PÅ LISTAN</div>
+      <div class="chip-row">
+        {% for item in podium_rest %}
+          <div class="chip">
+            <div class="rank-circle">{{ item.rank }}</div>
+            <div class="chip-name">{{ item.label|upper }}</div>
+            <div class="chip-pct">{{ item.pct }}%</div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+  </div>
+</div>

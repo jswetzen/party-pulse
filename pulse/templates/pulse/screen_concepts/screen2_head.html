@@ -1,0 +1,369 @@
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap">
+  <style>
+    :root {
+      --bg-0: #05020c;
+      --bg-1: #0c0620;
+      --bg-2: #150a30;
+      --amber: #ffcf3d;
+      --amber-dim: #8a6a1f;
+      --cyan: #34f2ff;
+      --cyan-dim: #1c7d87;
+      --magenta: #ff35d6;
+      --magenta-dim: #8a1c78;
+      --ink: #cfc4ef;
+      --ink-dim: #6a5f92;
+    }
+
+    * { box-sizing: border-box; }
+
+    .screen {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      background:
+        radial-gradient(ellipse 1400px 900px at 50% 42%, var(--bg-2) 0%, var(--bg-1) 45%, var(--bg-0) 78%);
+      overflow: hidden;
+      font-family: 'VT323', 'Courier New', monospace;
+      color: var(--ink);
+      animation: flicker 6.5s infinite steps(1);
+    }
+
+    /* ---------- content ---------- */
+
+    .content {
+      position: absolute;
+      inset: 0;
+      padding: 54px 118px 42px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      z-index: 3;
+    }
+
+    .topbar {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 18px;
+      letter-spacing: 2px;
+      color: var(--magenta);
+      text-shadow: 0 0 10px rgba(255, 53, 214, 0.85), 0 0 22px rgba(255, 53, 214, 0.5);
+    }
+
+    .live-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--magenta);
+      box-shadow: 0 0 12px 3px rgba(255, 53, 214, 0.9);
+      animation: blink 1.4s infinite steps(1);
+    }
+
+    .tag {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 16px;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      opacity: 0.85;
+      text-shadow: 0 0 8px rgba(52, 242, 255, 0.7);
+    }
+
+    .tag svg { width: 22px; height: 22px; stroke: var(--cyan); }
+
+    .title-wrap {
+      flex: 0 0 auto;
+      text-align: center;
+    }
+
+    .title {
+      margin: 0;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 86px;
+      line-height: 1;
+      letter-spacing: 10px;
+      color: var(--amber);
+      text-shadow:
+        -3px 0 rgba(255, 53, 214, 0.55),
+        3px 0 rgba(52, 242, 255, 0.55),
+        0 0 24px rgba(255, 207, 61, 0.75),
+        0 0 60px rgba(255, 207, 61, 0.4);
+      animation: glow-pulse 3.2s ease-in-out infinite;
+    }
+
+    .subtitle-chip {
+      margin-top: 14px;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 16px;
+      letter-spacing: 6px;
+      color: var(--ink-dim);
+    }
+
+    .question-plaque {
+      flex: 0 0 auto;
+      align-self: center;
+      max-width: 1520px;
+      padding: 18px 46px;
+      text-align: center;
+      background: linear-gradient(180deg, rgba(52, 242, 255, 0.10), rgba(20, 8, 40, 0.35));
+      border: 2px solid rgba(52, 242, 255, 0.55);
+      clip-path: polygon(
+        0 12px, 12px 12px, 12px 0,
+        calc(100% - 12px) 0, calc(100% - 12px) 12px, 100% 12px,
+        100% calc(100% - 12px), calc(100% - 12px) calc(100% - 12px), calc(100% - 12px) 100%,
+        12px 100%, 12px calc(100% - 12px), 0 calc(100% - 12px)
+      );
+      box-shadow: 0 0 26px rgba(52, 242, 255, 0.18), inset 0 0 24px rgba(52, 242, 255, 0.08);
+    }
+
+    .question {
+      margin: 0;
+      font-family: 'VT323', 'Courier New', monospace;
+      font-size: 38px;
+      line-height: 1.15;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      text-shadow: 0 0 10px rgba(52, 242, 255, 0.7);
+    }
+
+    /* ---------- board ---------- */
+
+    .board {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .board-header {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: 150px 1fr 470px 210px;
+      gap: 32px;
+      padding: 10px 34px;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 15px;
+      letter-spacing: 3px;
+      color: var(--ink-dim);
+      background: rgba(255, 255, 255, 0.03);
+      border-top: 2px solid rgba(255, 255, 255, 0.12);
+      border-bottom: 2px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .board-header span:nth-child(3) { text-align: left; }
+    .board-header span:nth-child(4) { text-align: right; }
+
+    .rows-wrap {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .row {
+      flex: 1 1 0;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 150px 1fr 470px 210px;
+      align-items: center;
+      gap: 32px;
+      padding: 0 34px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(0, 0, 0, 0.18));
+      border: 2px solid var(--row-color-dim);
+      clip-path: polygon(
+        0 14px, 14px 14px, 14px 0,
+        calc(100% - 14px) 0, calc(100% - 14px) 14px, 100% 14px,
+        100% calc(100% - 14px), calc(100% - 14px) calc(100% - 14px), calc(100% - 14px) 100%,
+        14px 100%, 14px calc(100% - 14px), 0 calc(100% - 14px)
+      );
+      box-shadow: 0 0 calc(20px * var(--intensity)) rgba(0, 0, 0, 0.4),
+                  inset 0 0 calc(30px * var(--intensity)) var(--row-glow);
+    }
+
+    .row--1 { --row-color: var(--amber); --row-color-dim: var(--amber-dim); --row-glow: rgba(255, 207, 61, 0.14); --intensity: 1; }
+    .row--2 { --row-color: var(--cyan); --row-color-dim: var(--cyan-dim); --row-glow: rgba(52, 242, 255, 0.12); --intensity: 0.85; }
+    .row--3 { --row-color: var(--magenta); --row-color-dim: var(--magenta-dim); --row-glow: rgba(255, 53, 214, 0.12); --intensity: 0.72; }
+    .row--4 { --row-color: var(--cyan); --row-color-dim: var(--cyan-dim); --row-glow: rgba(52, 242, 255, 0.08); --intensity: 0.58; }
+    .row--5 { --row-color: var(--magenta); --row-color-dim: var(--magenta-dim); --row-glow: rgba(255, 53, 214, 0.08); --intensity: 0.46; }
+
+    .rank {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 40px;
+      color: var(--row-color);
+      text-shadow: 0 0 calc(14px * var(--intensity)) var(--row-color);
+      opacity: var(--intensity);
+    }
+
+    .rank svg { width: 30px; height: 30px; stroke: var(--row-color); flex: 0 0 auto; }
+
+    .name-col {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .name-label {
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 27px;
+      letter-spacing: 2px;
+      color: var(--ink);
+      text-transform: uppercase;
+      text-shadow: 0 0 calc(6px * var(--intensity)) var(--row-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .svar-count {
+      font-family: 'VT323', 'Courier New', monospace;
+      font-size: 22px;
+      letter-spacing: 1px;
+      color: var(--ink-dim);
+    }
+
+    .bar-track {
+      position: relative;
+      height: 34px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 2px solid rgba(255, 255, 255, 0.14);
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      position: absolute;
+      inset: 0;
+      width: var(--pct);
+      background:
+        repeating-linear-gradient(90deg, transparent 0 3px, rgba(0,0,0,0.35) 3px 5px),
+        linear-gradient(90deg, var(--row-color-dim), var(--row-color));
+      box-shadow: 0 0 calc(16px * var(--intensity)) var(--row-color);
+    }
+
+    .score {
+      text-align: right;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 42px;
+      color: var(--row-color);
+      text-shadow: 0 0 calc(16px * var(--intensity)) var(--row-color);
+      opacity: var(--intensity);
+      white-space: nowrap;
+    }
+
+    .score .pct {
+      font-size: 24px;
+      opacity: 0.8;
+    }
+
+    .footer {
+      flex: 0 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 10px 0;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      font-size: 14px;
+      letter-spacing: 3px;
+      color: var(--ink-dim);
+      opacity: 0.7;
+    }
+
+    /* ---------- CRT overlay fx ---------- */
+
+    .scanlines {
+      position: absolute;
+      inset: 0;
+      z-index: 6;
+      pointer-events: none;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.32) 0px,
+        rgba(0, 0, 0, 0.32) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      mix-blend-mode: multiply;
+    }
+
+    .scan-highlight {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 130px;
+      z-index: 7;
+      pointer-events: none;
+      background: linear-gradient(to bottom, transparent, rgba(120, 220, 255, 0.06), transparent);
+      mix-blend-mode: screen;
+      animation: scan-move 6s linear infinite;
+    }
+
+    .glass {
+      position: absolute;
+      inset: 0;
+      z-index: 8;
+      pointer-events: none;
+      background: linear-gradient(118deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 16%, transparent 34%);
+    }
+
+    .vignette {
+      position: absolute;
+      inset: 0;
+      z-index: 9;
+      pointer-events: none;
+      background: radial-gradient(ellipse 1200px 760px at 50% 48%, transparent 55%, rgba(0, 0, 0, 0.55) 88%, rgba(0, 0, 0, 0.88) 100%);
+    }
+
+    /* ---------- keyframes ---------- */
+
+    @keyframes flicker {
+      0%, 91%, 100% { opacity: 1; }
+      92% { opacity: 0.96; }
+      94% { opacity: 1; }
+      96% { opacity: 0.97; }
+    }
+
+    @keyframes blink {
+      0%, 55% { opacity: 1; }
+      56%, 100% { opacity: 0.15; }
+    }
+
+    @keyframes glow-pulse {
+      0%, 100% {
+        text-shadow:
+          -3px 0 rgba(255, 53, 214, 0.55),
+          3px 0 rgba(52, 242, 255, 0.55),
+          0 0 24px rgba(255, 207, 61, 0.75),
+          0 0 60px rgba(255, 207, 61, 0.4);
+      }
+      50% {
+        text-shadow:
+          -3px 0 rgba(255, 53, 214, 0.75),
+          3px 0 rgba(52, 242, 255, 0.75),
+          0 0 34px rgba(255, 207, 61, 0.95),
+          0 0 84px rgba(255, 207, 61, 0.55);
+      }
+    }
+
+    @keyframes scan-move {
+      0% { transform: translateY(-140px); }
+      100% { transform: translateY(1080px); }
+    }
+  </style>

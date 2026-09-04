@@ -1,0 +1,218 @@
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700;900&family=Share+Tech+Mono&display=swap">
+  <style>
+    :root{
+      --carbon-0:#07080a;
+      --carbon-1:#0d0f12;
+      --panel:#14171b;
+      --panel-2:#191d22;
+      --metal-hi:#9aa3ab;
+      --metal-mid:#565e65;
+      --metal-lo:#20242a;
+      --face-hi:#1b2027;
+      --face-lo:#07090b;
+      --blue:#2fd9ff;
+      --blue-deep:#0891b2;
+      --amber:#ffb223;
+      --amber-deep:#c9720a;
+      --redline:#ff5a4d;
+      --text-0:#eef3f6;
+      --text-1:#93a0aa;
+      --text-2:#576068;
+      --green:#3fe08a;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    .stage{
+      width:1920px;height:1080px;position:relative;overflow:hidden;
+      background:
+        radial-gradient(ellipse 1400px 900px at 960px 560px, #14191f 0%, #0c0e11 55%, var(--carbon-0) 100%);
+      font-family:'Titillium Web',"Segoe UI",sans-serif;
+      color:var(--text-0);
+      isolation:isolate;
+    }
+    /* carbon fiber weave */
+    .stage::before{
+      content:"";
+      position:absolute; inset:0;
+      background-image:
+        repeating-linear-gradient(45deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 8px),
+        repeating-linear-gradient(-45deg, rgba(255,255,255,0.018) 0 2px, transparent 2px 8px);
+      mix-blend-mode:overlay;
+      pointer-events:none;
+      z-index:0;
+    }
+    .stage::after{
+      content:"";
+      position:absolute; inset:0;
+      box-shadow: inset 0 0 260px 60px rgba(0,0,0,0.75);
+      pointer-events:none;
+      z-index:5;
+    }
+
+    /* ---------- trim strips ---------- */
+    .trim{
+      position:absolute; left:0; width:1920px; height:34px;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 40px;
+      background:linear-gradient(180deg,var(--panel-2),var(--panel));
+      border-bottom:1px solid rgba(0,0,0,0.6);
+      z-index:2;
+    }
+    .trim.top{ top:0; border-bottom:1px solid rgba(0,0,0,0.6); }
+    .trim.bottom{ bottom:0; top:auto; border-top:1px solid rgba(255,255,255,0.04); border-bottom:none; }
+    .rivets{ display:flex; gap:26px; }
+    .rivet{
+      width:5px;height:5px;border-radius:50%;
+      background:radial-gradient(circle at 35% 30%, var(--metal-hi), var(--metal-lo) 70%);
+      box-shadow:0 1px 0 rgba(0,0,0,0.6);
+    }
+    .trim-label{
+      font-size:12px; letter-spacing:3px; color:var(--text-2); font-weight:600;
+    }
+    .trim-label b{ color:var(--text-1); font-weight:700; }
+    .live-tag{ display:flex; align-items:center; gap:8px; font-size:12px; letter-spacing:3px; color:var(--text-1); font-weight:600; }
+    .live-dot{ width:8px;height:8px;border-radius:50%; background:var(--green); box-shadow:0 0 8px 2px rgba(63,224,138,0.7); animation:pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+
+    /* ---------- header ---------- */
+    .header{
+      position:absolute; top:44px; left:0; width:1920px;
+      display:flex; flex-direction:column; align-items:center; gap:10px;
+      z-index:3;
+    }
+    .eyebrow{
+      display:flex; align-items:center; gap:12px;
+      font-size:15px; letter-spacing:6px; font-weight:700; color:var(--amber);
+      text-shadow:0 0 14px rgba(255,178,35,0.45);
+    }
+    .eyebrow::before, .eyebrow::after{
+      content:""; width:60px; height:1px; background:linear-gradient(90deg, transparent, var(--amber));
+    }
+    .eyebrow::after{ transform:scaleX(-1); }
+    .question{
+      max-width:1500px;
+      text-align:center;
+      font-size:44px;
+      font-weight:700;
+      line-height:1.22;
+      color:var(--text-0);
+      letter-spacing:0.2px;
+      padding:0 20px;
+    }
+    .units-row{
+      display:flex; align-items:center; gap:26px; margin-top:2px;
+    }
+    .unit-chip{
+      display:flex; align-items:center; gap:10px;
+      font-family:'Share Tech Mono', monospace;
+      font-size:14px; letter-spacing:2px; color:var(--text-1);
+      padding:6px 16px;
+      background:rgba(255,255,255,0.03);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:3px;
+    }
+    .marker-swatch{
+      width:10px; height:10px; border-radius:1px;
+      background:var(--amber);
+      box-shadow:0 0 6px 1px rgba(255,178,35,0.7);
+      display:inline-block;
+    }
+
+    /* ---------- gauges layer ---------- */
+    .gauges-svg{ position:absolute; top:0; left:0; z-index:2; }
+
+    .gauge-label{
+      position:absolute; transform:translate(-50%,-50%);
+      display:flex; align-items:center; gap:14px;
+      z-index:4;
+    }
+    .gauge-label .icon{ width:38px; height:38px; flex:none; color:var(--text-1); }
+    .gauge-label .txt{ display:flex; flex-direction:column; gap:2px; }
+    .gauge-label .name{ font-size:26px; font-weight:900; letter-spacing:3px; color:var(--text-0); }
+    .gauge-label .sub{ font-size:12px; font-weight:600; letter-spacing:3px; color:var(--text-2); }
+
+    .lcd{
+      position:absolute; transform:translate(-50%,-50%);
+      width:172px; height:78px;
+      border-radius:6px;
+      background:linear-gradient(180deg,#0a1210,#050a08);
+      border:1px solid rgba(63,224,138,0.18);
+      box-shadow:inset 0 0 14px rgba(0,0,0,0.85), inset 0 0 24px rgba(63,224,138,0.05);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:2px;
+      z-index:4;
+    }
+    .lcd .val{
+      font-family:'Share Tech Mono', monospace;
+      font-size:40px; font-weight:400; color:var(--green);
+      text-shadow:0 0 10px rgba(63,224,138,0.65), 0 0 2px rgba(63,224,138,0.9);
+      letter-spacing:1px;
+      line-height:1;
+    }
+    .lcd .unit{
+      font-family:'Share Tech Mono', monospace;
+      font-size:11px; letter-spacing:3px; color:rgba(63,224,138,0.55);
+    }
+
+    .svar-chip{
+      position:absolute; transform:translate(-50%,-50%);
+      font-family:'Share Tech Mono', monospace;
+      font-size:15px; letter-spacing:2px; color:var(--text-1);
+      padding:7px 18px;
+      border:1px solid rgba(255,255,255,0.1);
+      border-radius:14px;
+      background:rgba(255,255,255,0.03);
+      z-index:4;
+      white-space:nowrap;
+    }
+    .svar-chip b{ color:var(--blue); font-weight:700; }
+
+    /* ---------- trip computer / summary panel ---------- */
+    .trip-panel{
+      position:absolute; left:460px; top:936px; width:1000px; height:96px;
+      display:flex; align-items:stretch;
+      border-radius:8px;
+      background:linear-gradient(180deg,var(--panel-2),var(--panel));
+      border:1px solid rgba(255,255,255,0.07);
+      box-shadow:0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04);
+      z-index:3;
+      overflow:hidden;
+    }
+    .trip-seg{
+      flex:none; display:flex; flex-direction:column; justify-content:center;
+      padding:0 34px;
+      gap:6px;
+    }
+    .trip-seg + .trip-seg{ border-left:1px solid rgba(255,255,255,0.06); }
+    .trip-label{ font-size:12px; letter-spacing:3px; color:var(--text-2); font-weight:700; }
+    .trip-value{
+      font-family:'Share Tech Mono', monospace;
+      font-size:38px; color:var(--amber);
+      text-shadow:0 0 12px rgba(255,178,35,0.4);
+    }
+    .trip-value small{ font-size:16px; color:var(--text-1); font-family:'Titillium Web',sans-serif; letter-spacing:2px; margin-left:6px; }
+    .trip-bar-seg{
+      flex:1; display:flex; flex-direction:column; justify-content:center; gap:10px;
+      padding:0 40px;
+    }
+    .bar-track{
+      position:relative; width:100%; height:14px; border-radius:7px;
+      background:#050607;
+      box-shadow:inset 0 1px 4px rgba(0,0,0,0.9), inset 0 0 0 1px rgba(255,255,255,0.05);
+    }
+    .bar-fill{
+      position:absolute; left:0; top:0; bottom:0;
+      border-radius:7px;
+      width:338px;
+      background:linear-gradient(90deg, var(--amber-deep), var(--amber));
+      box-shadow:0 0 14px 2px rgba(255,178,35,0.55);
+    }
+    .bar-ticks{ position:relative; width:100%; height:16px; }
+    .bar-tick{ position:absolute; top:0; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:3px; }
+    .bar-tick .ln{ width:1px; height:6px; background:var(--text-2); }
+    .bar-tick .lb{ font-family:'Share Tech Mono', monospace; font-size:12px; color:var(--text-1); }
+
+    /* ---------- footer trim text ---------- */
+    .brand{ font-size:12px; letter-spacing:4px; color:var(--text-2); font-weight:700; }
+    .brand b{ color:var(--blue); }
+  </style>

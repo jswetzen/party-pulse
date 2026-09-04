@@ -7,6 +7,16 @@
   <h1 class="screen-question">{{ state.question.text_sv }}</h1>
   {% include "pulse/_pulse_line.html" with animated=True %}
 
+{% elif effective_style == "podium" %}
+  <div id="style-canvas-viewport"><div id="style-canvas">
+    {% include "pulse/screen_styles/_podium.html" %}
+  </div></div>
+
+{% elif effective_style == "bouquet" %}
+  <div id="style-canvas-viewport"><div id="style-canvas">
+    {% include "pulse/screen_styles/_bouquet.html" %}
+  </div></div>
+
 {% else %}
   <h1 class="screen-question" style="font-size:max(1.4rem,2.6vw)">{{ state.question.text_sv }}</h1>
   {% include "pulse/_pulse_line.html" %}

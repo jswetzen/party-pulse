@@ -1,0 +1,191 @@
+{% comment %}
+Bouquet reveal style -- only ever included when views.screen_state() has already confirmed
+style_is_compatible() (boolean, breakdown=OVERALL) AND at least one response exists
+(bouquet is never None here). Markup/CSS trace back to the "Bouquet" concept from the
+10-screen design exploration (see PLAN.md) -- screen_concepts/screen3_body.html /
+screen3_head.html were the original static, single-snapshot mockup (hand-placed for one
+specific 51.1/48.9 split); this is that same design made data-driven via
+views._bouquet_geometry, which computes every position below from the real yes_pct instead.
+The tendril+note flourish only makes sense when the split actually IS close to 50/50, so it
+only renders when views._bouquet_geometry flagged is_near_tie.
+{% endcomment %}
+<div class="style-bouquet">
+  <div class="stage">
+
+    <!-- paper grain + soft watercolor washes -->
+    <svg class="layer" viewBox="0 0 1920 1080" width="1920" height="1080">
+      <defs>
+        <filter id="grain" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" result="n"></feTurbulence>
+          <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.22  0 0 0 0 0.18  0 0 0 0 0.13  0 0 0 0.045 0"></feColorMatrix>
+        </filter>
+        <filter id="soft-blur" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="70"></feGaussianBlur>
+        </filter>
+      </defs>
+      <ellipse cx="330" cy="230" rx="360" ry="260" fill="#c98a83" opacity="0.07" filter="url(#soft-blur)"></ellipse>
+      <ellipse cx="1610" cy="860" rx="380" ry="280" fill="#8a9873" opacity="0.08" filter="url(#soft-blur)"></ellipse>
+      <ellipse cx="1680" cy="150" rx="300" ry="220" fill="#c9a45f" opacity="0.05" filter="url(#soft-blur)"></ellipse>
+      <rect x="0" y="0" width="1920" height="1080" filter="url(#grain)"></rect>
+    </svg>
+
+    <!-- hairline stationery frame -->
+    <svg class="layer" viewBox="0 0 1920 1080" width="1920" height="1080">
+      <rect class="frame-rect" x="54" y="54" width="1812" height="972"></rect>
+      <rect class="frame-rect" x="66" y="66" width="1788" height="948" opacity="0.6"></rect>
+    </svg>
+
+    <!-- botanical corner sprigs -- decorative, not data-driven -->
+    <svg class="layer" viewBox="0 0 1920 1080" width="1920" height="1080">
+      <defs>
+        <g id="leaf">
+          <path d="M0,0 C -7,-16 -5,-35 0,-50 C 5,-35 7,-16 0,0 Z"
+                fill="#8a9873" fill-opacity="0.5" stroke="#62704c" stroke-width="1.3" stroke-linejoin="round"></path>
+          <path d="M0,-3 C 0,-17 0,-33 0,-47" fill="none" stroke="#62704c" stroke-width="0.9" stroke-opacity="0.55"></path>
+        </g>
+        <g id="leaf-r">
+          <path d="M0,0 C -7,-16 -5,-35 0,-50 C 5,-35 7,-16 0,0 Z"
+                fill="#c98a83" fill-opacity="0.42" stroke="#9c5a52" stroke-width="1.3" stroke-linejoin="round"></path>
+          <path d="M0,-3 C 0,-17 0,-33 0,-47" fill="none" stroke="#9c5a52" stroke-width="0.9" stroke-opacity="0.5"></path>
+        </g>
+        <g id="bud">
+          <path d="M0,0 C -5,-11 -4,-23 0,-30 C 4,-23 5,-11 0,0 Z"
+                fill="#b97b73" fill-opacity="0.48" stroke="#9c5a52" stroke-width="1.2"></path>
+          <path d="M-4,-3 C -6,-5 -6,-8 -4,-10" fill="none" stroke="#62704c" stroke-width="0.9"></path>
+          <path d="M4,-3 C 6,-5 6,-8 4,-10" fill="none" stroke="#62704c" stroke-width="0.9"></path>
+        </g>
+        <g id="blossom">
+          <g stroke="#9c5a52" stroke-width="1.1" fill="#c98a83" fill-opacity="0.46">
+            <ellipse cx="0" cy="-11" rx="7" ry="12"></ellipse>
+            <ellipse cx="0" cy="-11" rx="7" ry="12" transform="rotate(72)"></ellipse>
+            <ellipse cx="0" cy="-11" rx="7" ry="12" transform="rotate(144)"></ellipse>
+            <ellipse cx="0" cy="-11" rx="7" ry="12" transform="rotate(216)"></ellipse>
+            <ellipse cx="0" cy="-11" rx="7" ry="12" transform="rotate(288)"></ellipse>
+          </g>
+          <circle r="4.2" fill="#c9a45f" stroke="#a9803f" stroke-width="0.8"></circle>
+        </g>
+      </defs>
+
+      <g>
+        <path d="M14,18 C 90,4 168,36 232,108" fill="none" stroke="#7c8c70" stroke-width="1.6" stroke-linecap="round"></path>
+        <use href="#bud" x="34" y="34" transform="rotate(200 34 34)"></use>
+        <use href="#leaf" x="78" y="22" transform="rotate(-56 78 22)"></use>
+        <use href="#leaf-r" x="140" y="42" transform="rotate(-28 140 42) scale(-1,1) translate(-280,0)"></use>
+        <use href="#leaf" x="196" y="76" transform="rotate(6 196 76)"></use>
+        <use href="#blossom" x="234" y="112" transform="rotate(18 234 112) scale(1.15)"></use>
+      </g>
+
+      <g transform="translate(1920,0) scale(-1,1)">
+        <path d="M14,18 C 90,4 168,36 232,108" fill="none" stroke="#7c8c70" stroke-width="1.6" stroke-linecap="round"></path>
+        <use href="#bud" x="34" y="34" transform="rotate(200 34 34)"></use>
+        <use href="#leaf" x="78" y="22" transform="rotate(-56 78 22)"></use>
+        <use href="#leaf-r" x="140" y="42" transform="rotate(-28 140 42) scale(-1,1) translate(-280,0)"></use>
+        <use href="#leaf" x="196" y="76" transform="rotate(6 196 76)"></use>
+        <use href="#blossom" x="234" y="112" transform="rotate(18 234 112) scale(1.15)"></use>
+      </g>
+
+      <g transform="translate(0,1080) scale(1,-1)">
+        <path d="M14,18 C 96,2 176,30 246,96" fill="none" stroke="#7c8c70" stroke-width="1.6" stroke-linecap="round"></path>
+        <use href="#bud" x="36" y="32" transform="rotate(196 36 32)"></use>
+        <use href="#leaf-r" x="86" y="18" transform="rotate(-60 86 18)"></use>
+        <use href="#leaf" x="150" y="40" transform="rotate(-24 150 40)"></use>
+        <use href="#leaf-r" x="204" y="68" transform="rotate(10 204 68)"></use>
+        <use href="#blossom" x="248" y="100" transform="rotate(-8 248 100) scale(1.25)"></use>
+        <use href="#leaf" x="292" y="118" transform="rotate(20 292 118) scale(0.8)"></use>
+      </g>
+
+      <g transform="translate(1920,1080) scale(-1,-1)">
+        <path d="M14,18 C 96,2 176,30 246,96" fill="none" stroke="#7c8c70" stroke-width="1.6" stroke-linecap="round"></path>
+        <use href="#bud" x="36" y="32" transform="rotate(196 36 32)"></use>
+        <use href="#leaf-r" x="86" y="18" transform="rotate(-60 86 18)"></use>
+        <use href="#leaf" x="150" y="40" transform="rotate(-24 150 40)"></use>
+        <use href="#leaf-r" x="204" y="68" transform="rotate(10 204 68)"></use>
+        <use href="#blossom" x="248" y="100" transform="rotate(-8 248 100) scale(1.25)"></use>
+        <use href="#leaf" x="292" y="118" transform="rotate(20 292 118) scale(0.8)"></use>
+      </g>
+
+      <g transform="translate(58,540)">
+        <path d="M0,-70 C 14,-24 14,24 0,70" fill="none" stroke="#7c8c70" stroke-width="1.3" stroke-linecap="round" opacity="0.8"></path>
+        <use href="#leaf" x="4" y="-46" transform="rotate(70 4 -46) scale(0.75)"></use>
+        <use href="#leaf-r" x="8" y="0" transform="rotate(90 8 0) scale(-0.75,0.75) translate(-16,0)"></use>
+        <use href="#leaf" x="4" y="46" transform="rotate(110 4 46) scale(0.75)"></use>
+      </g>
+      <g transform="translate(1862,540) scale(-1,1)">
+        <path d="M0,-70 C 14,-24 14,24 0,70" fill="none" stroke="#7c8c70" stroke-width="1.3" stroke-linecap="round" opacity="0.8"></path>
+        <use href="#leaf" x="4" y="-46" transform="rotate(70 4 -46) scale(0.75)"></use>
+        <use href="#leaf-r" x="8" y="0" transform="rotate(90 8 0) scale(-0.75,0.75) translate(-16,0)"></use>
+        <use href="#leaf" x="4" y="46" transform="rotate(110 4 46) scale(0.75)"></use>
+      </g>
+    </svg>
+
+    <!-- top copy -->
+    <div class="eyebrow">Party Pulse &middot; Resultat</div>
+    <div class="headline">{{ state.question.text_sv }}</div>
+
+    <svg class="divider" viewBox="0 0 300 40">
+      <line x1="6" y1="20" x2="126" y2="20" stroke="#a9803f" stroke-width="1" opacity="0.55"></line>
+      <line x1="174" y1="20" x2="294" y2="20" stroke="#a9803f" stroke-width="1" opacity="0.55"></line>
+      <g transform="translate(150,26)">
+        <g stroke="#9c5a52" stroke-width="1" fill="#c98a83" fill-opacity="0.5">
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5"></ellipse>
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5" transform="rotate(72)"></ellipse>
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5" transform="rotate(144)"></ellipse>
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5" transform="rotate(216)"></ellipse>
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5" transform="rotate(288)"></ellipse>
+        </g>
+        <circle r="3.4" fill="#c9a45f" stroke="#a9803f" stroke-width="0.7"></circle>
+      </g>
+    </svg>
+
+    <!-- central visual: the real ja/nej split -->
+    <div class="visual">
+      <div class="num nej" style="left:{{ bouquet.nej_center }}px">{{ bouquet.nej_pct }}%</div>
+      <div class="num ja" style="left:{{ bouquet.ja_center }}px">{{ bouquet.yes_pct }}%</div>
+      <div class="num-label nej" style="left:{{ bouquet.nej_center }}px">Nej</div>
+      <div class="num-label ja" style="left:{{ bouquet.ja_center }}px">Ja</div>
+
+      <div class="guideline"></div>
+      <div class="guideline-tag">mitten</div>
+
+      <div class="track-wrap">
+        <div class="track-seg nej" style="width:{{ bouquet.nej_seg_width }}px"></div>
+        <div class="track-seg ja" style="left:{{ bouquet.ja_seg_left }}px; width:{{ bouquet.ja_seg_width }}px"></div>
+        <div class="track-seam" style="left:{{ bouquet.seam_left }}px; width:{{ bouquet.seam_width }}px"></div>
+        <div class="track-outline"></div>
+      </div>
+
+      {% if bouquet.is_near_tie %}
+        <svg class="tendril" viewBox="0 0 220 110">
+          <path d="M47,8 C 90,30 140,58 190,86" fill="none" stroke="#a9803f" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="1 5" stroke-linecap="round"></path>
+        </svg>
+      {% endif %}
+
+      <svg class="marker" width="64" height="64" viewBox="-24 -24 48 48" style="left:{{ bouquet.marker_left }}px">
+        <g stroke="#9c5a52" stroke-width="1.2" fill="#c98a83" fill-opacity="0.75">
+          <ellipse cx="0" cy="-11" rx="7.5" ry="13"></ellipse>
+          <ellipse cx="0" cy="-11" rx="7.5" ry="13" transform="rotate(72)"></ellipse>
+          <ellipse cx="0" cy="-11" rx="7.5" ry="13" transform="rotate(144)"></ellipse>
+          <ellipse cx="0" cy="-11" rx="7.5" ry="13" transform="rotate(216)"></ellipse>
+          <ellipse cx="0" cy="-11" rx="7.5" ry="13" transform="rotate(288)"></ellipse>
+        </g>
+        <circle r="4.6" fill="#c9a45f" stroke="#a9803f" stroke-width="1"></circle>
+      </svg>
+
+      {% if bouquet.is_near_tie %}
+        <div class="note">nästan mitt itu</div>
+      {% endif %}
+    </div>
+
+    <!-- bottom -->
+    <svg class="rule" viewBox="0 0 200 26">
+      <line x1="0" y1="13" x2="86" y2="13" stroke="#a9803f" stroke-width="1" opacity="0.5"></line>
+      <line x1="114" y1="13" x2="200" y2="13" stroke="#a9803f" stroke-width="1" opacity="0.5"></line>
+      <path d="M100,6 L104,13 L100,20 L96,13 Z" fill="#c9a45f" fill-opacity="0.7" stroke="#a9803f" stroke-width="0.8"></path>
+    </svg>
+    <div class="count"><b>{{ bouquet.count }}</b> svar</div>
+    {% if bouquet.is_near_tie %}
+      <div class="subcount">nästan jämnt delat</div>
+    {% endif %}
+
+  </div>
+</div>

@@ -1,0 +1,138 @@
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Fredoka:wght@500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --ink:#2B1810;
+      --cream:#FFFDF6;
+      --pink:#FF3E7F;
+      --yellow:#FFD23F;
+      --teal:#21C7B6;
+      --orange:#FF7A3D;
+      --purple:#9B5DE5;
+    }
+    *{ box-sizing:border-box; }
+    .board{
+      position:relative;
+      width:1920px;
+      height:1080px;
+      overflow:hidden;
+      background-color:#B4855A;
+      background-image:
+        radial-gradient(circle at 1px 1px, rgba(60,35,15,0.35) 1.4px, transparent 1.6px),
+        radial-gradient(circle at 6px 6px, rgba(255,230,190,0.16) 1px, transparent 1.4px),
+        radial-gradient(ellipse at 50% 42%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.28) 100%);
+      background-size: 11px 11px, 11px 11px, 1920px 1080px;
+      background-position: 0 0, 3px 3px, 0 0;
+      box-shadow:
+        inset 0 0 0 24px #6B4226,
+        inset 0 0 0 30px #3E2513;
+      font-family:'Fredoka', sans-serif;
+    }
+
+    /* ---------- confetti layer ---------- */
+    .confetti{ position:absolute; inset:0; z-index:2; }
+
+    /* ---------- title ---------- */
+    .title-wrap{ position:absolute; left:70px; top:26px; z-index:5; }
+    .title-highlight{
+      position:absolute; left:-16px; top:12px; width:730px; height:172px;
+      background:var(--yellow); opacity:0.55; transform:rotate(-2deg); border-radius:6px; z-index:3;
+    }
+    .title{
+      position:relative; z-index:4;
+      font-family:'Permanent Marker', cursive;
+      font-size:76px; line-height:0.98; letter-spacing:1px;
+      color:var(--ink); margin:0; transform:rotate(-2deg);
+      text-shadow:3px 3px 0 rgba(255,255,255,0.35);
+    }
+    .kicker{
+      position:absolute; left:74px; top:214px; z-index:5;
+      font-family:'Caveat', cursive; font-weight:700; font-size:32px;
+      color:#FFF6E4; transform:rotate(-3deg); opacity:0.92;
+      text-shadow:0 2px 3px rgba(0,0,0,0.35);
+    }
+    .tag{
+      position:absolute; left:900px; top:44px; z-index:6; transform:rotate(9deg);
+      background:var(--cream); border:3px dashed var(--ink); border-radius:34px;
+      padding:11px 26px; box-shadow:0 8px 14px rgba(20,10,5,0.35);
+      font-family:'Fredoka', sans-serif; font-weight:700; font-size:29px; color:var(--ink);
+    }
+
+    /* ---------- rosette tie badge ---------- */
+    .rosette-wrap{ position:absolute; left:1470px; top:52px; width:230px; height:230px; z-index:9; transform:rotate(9deg); }
+    .rosette-tail{
+      position:absolute; width:34px; height:78px; background:var(--pink);
+      clip-path: polygon(0 0, 100% 0, 100% 68%, 50% 100%, 0 68%);
+    }
+    .rosette-tail.a{ left:66px; top:170px; transform:rotate(-18deg); }
+    .rosette-tail.b{ left:126px; top:170px; transform:rotate(18deg); }
+    .rosette-medal{ position:absolute; inset:0; }
+    .rosette-text{
+      position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+      text-align:center; color:var(--ink);
+    }
+    .rosette-text .l1{ font-family:'Fredoka'; font-weight:700; font-size:16px; letter-spacing:1px; }
+    .rosette-text .l2{ font-family:'Fredoka'; font-weight:700; font-size:46px; line-height:1; }
+    .rosette-text .l3{ font-family:'Fredoka'; font-weight:600; font-size:15px; letter-spacing:2px; opacity:0.75; }
+
+    .note{
+      position:absolute; left:1428px; top:298px; width:250px; z-index:9; transform:rotate(-6deg);
+      font-family:'Caveat', cursive; font-weight:700; font-size:31px; color:var(--ink); text-align:center;
+      text-shadow:0 2px 2px rgba(255,255,255,0.4);
+    }
+
+    /* ---------- washi tape ---------- */
+    .washi{
+      position:absolute; height:40px; z-index:7; opacity:0.88;
+      background-image: repeating-linear-gradient(45deg, rgba(255,255,255,0.55) 0 8px, transparent 8px 16px);
+      box-shadow:0 3px 5px rgba(20,10,5,0.2);
+    }
+
+    /* ---------- polaroid cards (row 1 — the tied trio) ---------- */
+    .polaroid{
+      position:absolute; z-index:6;
+      width:460px; background:var(--cream); border-radius:5px;
+      padding:16px 16px 18px; box-shadow:0 16px 28px rgba(20,10,5,0.4), 0 3px 0 rgba(20,10,5,0.15);
+    }
+    .polaroid .photo{
+      width:100%; height:328px; border-radius:4px; position:relative;
+      display:flex; align-items:center; justify-content:center; overflow:hidden;
+      box-shadow:inset 0 0 0 3px rgba(43,24,16,0.15);
+    }
+    .polaroid .caption{ display:flex; flex-direction:column; align-items:center; gap:8px; padding-top:16px; text-align:center; }
+    .fika-name{ font-family:'Permanent Marker', cursive; font-size:32px; color:var(--ink); }
+    .pct-wrap{ position:relative; display:inline-block; }
+    .pct-hl{ position:absolute; left:-12px; right:-12px; top:18px; bottom:8px; opacity:0.55; border-radius:4px; transform:rotate(-1.5deg); z-index:0; }
+    .pct{ position:relative; z-index:1; font-family:'Fredoka'; font-weight:700; font-size:78px; color:var(--ink); line-height:1; }
+
+    /* ---------- ticket cards (row 2 — the runners-up) ---------- */
+    .ticket{
+      position:absolute; z-index:6;
+      width:430px; background:var(--cream); border-radius:16px;
+      padding:18px 22px; display:flex; align-items:center; gap:20px;
+      box-shadow:0 12px 22px rgba(20,10,5,0.35);
+    }
+    .ticket-icon{
+      flex:0 0 auto; width:126px; height:126px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      box-shadow:inset 0 0 0 3px rgba(43,24,16,0.15);
+    }
+    .ticket-divider{ align-self:stretch; width:0; border-left:3px dashed rgba(43,24,16,0.28); }
+    .ticket-text{ display:flex; flex-direction:column; gap:6px; }
+    .ticket-name{ font-family:'Permanent Marker', cursive; font-size:25px; color:var(--ink); }
+    .ticket-pct-wrap{ position:relative; display:inline-block; }
+    .ticket-hl{ position:absolute; left:-8px; right:-8px; top:10px; bottom:4px; opacity:0.55; border-radius:3px; transform:rotate(-1.5deg); z-index:0; }
+    .ticket-pct{ position:relative; z-index:1; font-family:'Fredoka'; font-weight:700; font-size:57px; color:var(--ink); line-height:1; }
+
+    /* ---------- coffee cup ---------- */
+    .cup-wrap{ position:absolute; left:850px; top:800px; width:220px; z-index:5; transform:rotate(-4deg); }
+    .steam{ animation: steamRise 3.2s ease-in-out infinite; transform-origin:center; }
+    .steam.b{ animation-delay:0.7s; }
+    .steam.c{ animation-delay:1.4s; }
+    @keyframes steamRise{
+      0%{ transform:translateY(0); opacity:0.85; }
+      55%{ opacity:0.35; }
+      100%{ transform:translateY(-16px); opacity:0; }
+    }
+  </style>

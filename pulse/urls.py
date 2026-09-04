@@ -20,4 +20,7 @@ urlpatterns = [
     # Big screen
     path("screen/", views.screen_display, name="screen-display"),
     path("screen/state/", views.screen_state, name="screen-state"),
+    # Big-screen redesign concepts — static previews, see views.screen_concept
+    path("screen/concepts/", views.screen_concepts_index, name="screen-concepts-index"),
+    path("screen/concepts/<int:n>/", views.screen_concept, name="screen-concept"),
 ]

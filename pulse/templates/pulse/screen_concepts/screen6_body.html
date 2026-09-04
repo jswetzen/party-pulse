@@ -1,0 +1,275 @@
+<div class="stage">
+
+  <!-- top trim -->
+  <div class="trim top">
+    <div class="trim-label">PARTY PULSE <b>// KAFFEMÄTARE</b></div>
+    <div class="rivets">
+      <div class="rivet"></div><div class="rivet"></div><div class="rivet"></div>
+      <div class="rivet"></div><div class="rivet"></div><div class="rivet"></div>
+      <div class="rivet"></div><div class="rivet"></div><div class="rivet"></div>
+      <div class="rivet"></div><div class="rivet"></div><div class="rivet"></div>
+    </div>
+    <div class="live-tag"><span class="live-dot"></span>AVSLÖJAT</div>
+  </div>
+
+  <!-- header -->
+  <div class="header">
+    <div class="eyebrow">INSTRUMENTPANEL</div>
+    <div class="question">Hur många koppar kaffe dricker du en vanlig dag?</div>
+    <div class="units-row">
+      <div class="unit-chip">SKALA&nbsp;0–6&nbsp;KOPPAR&nbsp;/&nbsp;DYGN</div>
+      <div class="unit-chip"><span class="marker-swatch"></span>MARKÖR&nbsp;=&nbsp;TOTALT&nbsp;SNITT&nbsp;2,9</div>
+    </div>
+  </div>
+
+  <!-- ============ GAUGES SVG ============ -->
+  <svg class="gauges-svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+    <defs>
+      <radialGradient id="faceGrad" cx="42%" cy="38%" r="75%">
+        <stop offset="0%" stop-color="#1c222a"/>
+        <stop offset="60%" stop-color="#10141a"/>
+        <stop offset="100%" stop-color="#060809"/>
+      </radialGradient>
+      <linearGradient id="bezelGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#8b939a"/>
+        <stop offset="18%" stop-color="#454c53"/>
+        <stop offset="50%" stop-color="#1c2024"/>
+        <stop offset="82%" stop-color="#3d434a"/>
+        <stop offset="100%" stop-color="#83898f"/>
+      </linearGradient>
+      <linearGradient id="hubGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#c3cad0"/>
+        <stop offset="45%" stop-color="#565d64"/>
+        <stop offset="100%" stop-color="#1b1e22"/>
+      </linearGradient>
+      <linearGradient id="trackGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#252b31"/>
+        <stop offset="100%" stop-color="#1a1f24"/>
+      </linearGradient>
+      <linearGradient id="fillGradBlue" x1="0%" y1="100%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0891b2"/>
+        <stop offset="100%" stop-color="#5eeaff"/>
+      </linearGradient>
+      <filter id="glowBlue" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="7" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glowAmber" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="5" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    <!-- ============ GAUGE: FAMILJ (cx420,cy600) ============ -->
+    <g>
+      <circle cx="420" cy="600" r="236" fill="url(#bezelGrad)"/>
+      <circle cx="420" cy="600" r="222" fill="#0a0c0e"/>
+      <circle cx="420" cy="600" r="197" fill="url(#faceGrad)"/>
+      <path d="M 625.00 600.00 A 205.00 205.00 0 0 1 564.96 744.96" fill="none" style="stroke:var(--redline)" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M 282.11 737.89 A 195.00 195.00 0 1 1 557.89 737.89" fill="none" stroke="url(#trackGrad)" stroke-width="20" stroke-linecap="round"/>
+      <path d="M 282.11 737.89 A 195.00 195.00 0 1 1 605.46 539.74" fill="none" stroke="url(#fillGradBlue)" stroke-width="20" stroke-linecap="round" filter="url(#glowBlue)"/>
+      <!-- minor ticks -->
+      <g style="stroke:var(--text-2)" stroke-width="3" stroke-linecap="round">
+        <line x1="233.4" y1="677.3" x2="216.7" y2="684.2"/>
+        <line x1="233.4" y1="522.7" x2="216.7" y2="515.8"/>
+        <line x1="342.7" y1="413.4" x2="335.8" y2="396.7"/>
+        <line x1="497.3" y1="413.4" x2="504.2" y2="396.7"/>
+        <line x1="606.6" y1="522.7" x2="623.3" y2="515.8"/>
+        <line x1="606.6" y1="677.3" x2="623.3" y2="684.2"/>
+      </g>
+      <!-- major ticks -->
+      <g style="stroke:var(--text-0)" stroke-width="5" stroke-linecap="round">
+        <line x1="285.6" y1="734.4" x2="264.4" y2="755.6"/>
+        <line x1="230.0" y1="600.0" x2="200.0" y2="600.0"/>
+        <line x1="285.6" y1="465.6" x2="264.4" y2="444.4"/>
+        <line x1="420.0" y1="410.0" x2="420.0" y2="380.0"/>
+        <line x1="554.4" y1="465.6" x2="575.6" y2="444.4"/>
+        <line x1="610.0" y1="600.0" x2="640.0" y2="600.0"/>
+        <line x1="554.4" y1="734.4" x2="575.6" y2="755.6"/>
+      </g>
+      <!-- reference marker: overall avg 2.9 -->
+      <line x1="404.70" y1="405.60" x2="402.43" y2="376.69" style="stroke:var(--amber)" stroke-width="6" stroke-linecap="round" filter="url(#glowAmber)"/>
+      <!-- numerals -->
+      <g font-family="'Share Tech Mono', monospace" font-size="20" style="fill:var(--text-1)" text-anchor="middle">
+        <text x="244.6" y="781.4">0</text>
+        <text x="172.0" y="606.0">1</text>
+        <text x="244.6" y="430.6">2</text>
+        <text x="420.0" y="343.0">3</text>
+        <text x="595.4" y="430.6">4</text>
+        <text x="668.0" y="606.0">5</text>
+        <text x="595.4" y="781.4">6</text>
+      </g>
+      <!-- needle -->
+      <line x1="381.96" y1="612.36" x2="586.43" y2="545.92" style="stroke:var(--amber)" stroke-width="9" stroke-linecap="round" filter="url(#glowAmber)"/>
+      <circle cx="586.43" cy="545.92" r="6" fill="#fff6e6"/>
+      <circle cx="420" cy="600" r="24" fill="url(#hubGrad)" stroke="#0a0c0e" stroke-width="2"/>
+      <circle cx="420" cy="600" r="7" fill="#0a0c0e"/>
+    </g>
+
+    <!-- ============ GAUGE: VÄN (cx960,cy600) ============ -->
+    <g>
+      <circle cx="960" cy="600" r="236" fill="url(#bezelGrad)"/>
+      <circle cx="960" cy="600" r="222" fill="#0a0c0e"/>
+      <circle cx="960" cy="600" r="197" fill="url(#faceGrad)"/>
+      <path d="M 1165.00 600.00 A 205.00 205.00 0 0 1 1104.96 744.96" fill="none" style="stroke:var(--redline)" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M 822.11 737.89 A 195.00 195.00 0 1 1 1097.89 737.89" fill="none" stroke="url(#trackGrad)" stroke-width="20" stroke-linecap="round"/>
+      <path d="M 822.11 737.89 A 195.00 195.00 0 0 1 811.72 473.36" fill="none" stroke="url(#fillGradBlue)" stroke-width="20" stroke-linecap="round" filter="url(#glowBlue)"/>
+      <g style="stroke:var(--text-2)" stroke-width="3" stroke-linecap="round">
+        <line x1="773.4" y1="677.3" x2="756.7" y2="684.2"/>
+        <line x1="773.4" y1="522.7" x2="756.7" y2="515.8"/>
+        <line x1="882.7" y1="413.4" x2="875.8" y2="396.7"/>
+        <line x1="1037.3" y1="413.4" x2="1044.2" y2="396.7"/>
+        <line x1="1146.6" y1="522.7" x2="1163.3" y2="515.8"/>
+        <line x1="1146.6" y1="677.3" x2="1163.3" y2="684.2"/>
+      </g>
+      <g style="stroke:var(--text-0)" stroke-width="5" stroke-linecap="round">
+        <line x1="825.6" y1="734.4" x2="804.4" y2="755.6"/>
+        <line x1="770.0" y1="600.0" x2="740.0" y2="600.0"/>
+        <line x1="825.6" y1="465.6" x2="804.4" y2="444.4"/>
+        <line x1="960.0" y1="410.0" x2="960.0" y2="380.0"/>
+        <line x1="1094.4" y1="465.6" x2="1115.6" y2="444.4"/>
+        <line x1="1150.0" y1="600.0" x2="1180.0" y2="600.0"/>
+        <line x1="1094.4" y1="734.4" x2="1115.6" y2="755.6"/>
+      </g>
+      <line x1="944.70" y1="405.60" x2="942.43" y2="376.69" style="stroke:var(--amber)" stroke-width="6" stroke-linecap="round" filter="url(#glowAmber)"/>
+      <g font-family="'Share Tech Mono', monospace" font-size="20" style="fill:var(--text-1)" text-anchor="middle">
+        <text x="784.6" y="781.4">0</text>
+        <text x="712.0" y="606.0">1</text>
+        <text x="784.6" y="430.6">2</text>
+        <text x="960.0" y="343.0">3</text>
+        <text x="1135.4" y="430.6">4</text>
+        <text x="1208.0" y="606.0">5</text>
+        <text x="1135.4" y="781.4">6</text>
+      </g>
+      <line x1="990.42" y1="625.98" x2="826.93" y2="486.35" style="stroke:var(--amber)" stroke-width="9" stroke-linecap="round" filter="url(#glowAmber)"/>
+      <circle cx="826.93" cy="486.35" r="6" fill="#fff6e6"/>
+      <circle cx="960" cy="600" r="24" fill="url(#hubGrad)" stroke="#0a0c0e" stroke-width="2"/>
+      <circle cx="960" cy="600" r="7" fill="#0a0c0e"/>
+    </g>
+
+    <!-- ============ GAUGE: PLUS EN (cx1500,cy600) ============ -->
+    <g>
+      <circle cx="1500" cy="600" r="236" fill="url(#bezelGrad)"/>
+      <circle cx="1500" cy="600" r="222" fill="#0a0c0e"/>
+      <circle cx="1500" cy="600" r="197" fill="url(#faceGrad)"/>
+      <path d="M 1705.00 600.00 A 205.00 205.00 0 0 1 1644.96 744.96" fill="none" style="stroke:var(--redline)" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+      <path d="M 1362.11 737.89 A 195.00 195.00 0 1 1 1637.89 737.89" fill="none" stroke="url(#trackGrad)" stroke-width="20" stroke-linecap="round"/>
+      <path d="M 1362.11 737.89 A 195.00 195.00 0 0 1 1362.11 462.11" fill="none" stroke="url(#fillGradBlue)" stroke-width="20" stroke-linecap="round" filter="url(#glowBlue)"/>
+      <g style="stroke:var(--text-2)" stroke-width="3" stroke-linecap="round">
+        <line x1="1313.4" y1="677.3" x2="1296.7" y2="684.2"/>
+        <line x1="1313.4" y1="522.7" x2="1296.7" y2="515.8"/>
+        <line x1="1422.7" y1="413.4" x2="1415.8" y2="396.7"/>
+        <line x1="1577.3" y1="413.4" x2="1584.2" y2="396.7"/>
+        <line x1="1686.6" y1="522.7" x2="1703.3" y2="515.8"/>
+        <line x1="1686.6" y1="677.3" x2="1703.3" y2="684.2"/>
+      </g>
+      <g style="stroke:var(--text-0)" stroke-width="5" stroke-linecap="round">
+        <line x1="1365.6" y1="734.4" x2="1344.4" y2="755.6"/>
+        <line x1="1310.0" y1="600.0" x2="1280.0" y2="600.0"/>
+        <line x1="1365.6" y1="465.6" x2="1344.4" y2="444.4"/>
+        <line x1="1500.0" y1="410.0" x2="1500.0" y2="380.0"/>
+        <line x1="1634.4" y1="465.6" x2="1655.6" y2="444.4"/>
+        <line x1="1690.0" y1="600.0" x2="1720.0" y2="600.0"/>
+        <line x1="1634.4" y1="734.4" x2="1655.6" y2="755.6"/>
+      </g>
+      <line x1="1484.70" y1="405.60" x2="1482.43" y2="376.69" style="stroke:var(--amber)" stroke-width="6" stroke-linecap="round" filter="url(#glowAmber)"/>
+      <g font-family="'Share Tech Mono', monospace" font-size="20" style="fill:var(--text-1)" text-anchor="middle">
+        <text x="1324.6" y="781.4">0</text>
+        <text x="1252.0" y="606.0">1</text>
+        <text x="1324.6" y="430.6">2</text>
+        <text x="1500.0" y="343.0">3</text>
+        <text x="1675.4" y="430.6">4</text>
+        <text x="1748.0" y="606.0">5</text>
+        <text x="1675.4" y="781.4">6</text>
+      </g>
+      <line x1="1528.28" y1="628.28" x2="1376.26" y2="476.26" style="stroke:var(--amber)" stroke-width="9" stroke-linecap="round" filter="url(#glowAmber)"/>
+      <circle cx="1376.26" cy="476.26" r="6" fill="#fff6e6"/>
+      <circle cx="1500" cy="600" r="24" fill="url(#hubGrad)" stroke="#0a0c0e" stroke-width="2"/>
+      <circle cx="1500" cy="600" r="7" fill="#0a0c0e"/>
+    </g>
+  </svg>
+  <!-- ============ /GAUGES SVG ============ -->
+
+  <!-- group labels -->
+  <div class="gauge-label" style="left:420px; top:322px;">
+    <svg class="icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 24 L24 10 L40 24"/>
+      <path d="M12 21 V38 H36 V21"/>
+      <path d="M20 38 V27 H28 V38"/>
+    </svg>
+    <div class="txt"><div class="name">FAMILJ</div><div class="sub">RELATION TILL PARET</div></div>
+  </div>
+  <div class="gauge-label" style="left:960px; top:322px;">
+    <svg class="icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="19" cy="20" r="8"/>
+      <circle cx="29" cy="20" r="8"/>
+      <path d="M9 39 C9 31 14 27 19 27"/>
+      <path d="M39 39 C39 31 34 27 29 27"/>
+    </svg>
+    <div class="txt"><div class="name">VÄN</div><div class="sub">RELATION TILL PARET</div></div>
+  </div>
+  <div class="gauge-label" style="left:1500px; top:322px;">
+    <svg class="icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="20" cy="18" r="9"/>
+      <path d="M6 40 C6 30 12 26 20 26 C28 26 34 30 34 40"/>
+      <path d="M38 14 V26 M32 20 H44"/>
+    </svg>
+    <div class="txt"><div class="name">PLUS EN</div><div class="sub">RELATION TILL PARET</div></div>
+  </div>
+
+  <!-- LCD readouts -->
+  <div class="lcd" style="left:420px; top:715px;">
+    <div class="val">4,6</div>
+    <div class="unit">KOPPAR SNITT</div>
+  </div>
+  <div class="lcd" style="left:960px; top:715px;">
+    <div class="val">1,9</div>
+    <div class="unit">KOPPAR SNITT</div>
+  </div>
+  <div class="lcd" style="left:1500px; top:715px;">
+    <div class="val">2,0</div>
+    <div class="unit">KOPPAR SNITT</div>
+  </div>
+
+  <!-- svar chips -->
+  <div class="svar-chip" style="left:420px; top:872px;"><b>46</b>&nbsp;SVAR</div>
+  <div class="svar-chip" style="left:960px; top:872px;"><b>55</b>&nbsp;SVAR</div>
+  <div class="svar-chip" style="left:1500px; top:872px;"><b>28</b>&nbsp;SVAR</div>
+
+  <!-- trip computer summary panel -->
+  <div class="trip-panel">
+    <div class="trip-seg" style="width:236px;">
+      <div class="trip-label">TOTALT SNITT</div>
+      <div class="trip-value">2,9<small>KOPPAR</small></div>
+    </div>
+    <div class="trip-bar-seg">
+      <div class="bar-track"><div class="bar-fill"></div></div>
+      <div class="bar-ticks">
+        <div class="bar-tick" style="left:0px;"><div class="ln"></div><div class="lb">0</div></div>
+        <div class="bar-tick" style="left:116.7px;"><div class="ln"></div><div class="lb">1</div></div>
+        <div class="bar-tick" style="left:233.3px;"><div class="ln"></div><div class="lb">2</div></div>
+        <div class="bar-tick" style="left:350px;"><div class="ln"></div><div class="lb">3</div></div>
+        <div class="bar-tick" style="left:466.7px;"><div class="ln"></div><div class="lb">4</div></div>
+        <div class="bar-tick" style="left:583.3px;"><div class="ln"></div><div class="lb">5</div></div>
+        <div class="bar-tick" style="left:700px;"><div class="ln"></div><div class="lb">6</div></div>
+      </div>
+    </div>
+    <div class="trip-seg" style="width:222px; align-items:flex-end; text-align:right;">
+      <div class="trip-label">SVAR TOTALT</div>
+      <div class="trip-value">129</div>
+    </div>
+  </div>
+
+  <!-- bottom trim -->
+  <div class="trim bottom">
+    <div class="brand">PARTY PULSE <b>//</b> LIVE INSTRUMENTPANEL</div>
+    <div class="rivets">
+      <div class="rivet"></div><div class="rivet"></div><div class="rivet"></div>
+      <div class="rivet"></div><div class="rivet"></div><div class="rivet"></div>
+      <div class="rivet"></div><div class="rivet"></div><div class="rivet"></div>
+      <div class="rivet"></div><div class="rivet"></div><div class="rivet"></div>
+    </div>
+    <div class="trim-label">NUMERISK FRÅGA <b>// MEDEL</b></div>
+  </div>
+
+</div>

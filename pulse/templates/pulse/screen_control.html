@@ -19,20 +19,27 @@
         </select>
       </label>
       <label>Fråga
-        <select name="question">
+        <select name="question" id="id_question">
           <option value="">—</option>
           {% for q in live_questions %}
-            <option value="{{ q.id }}" {% if prefill_question_id == q.id %}selected{% endif %}>{{ q.text_sv }}</option>
+            <option value="{{ q.id }}" data-qtype="{{ q.type }}" {% if prefill_question_id == q.id %}selected{% endif %}>{{ q.text_sv }}</option>
           {% endfor %}
         </select>
       </label>
       <label>Uppdelning
-        <select name="breakdown">
+        <select name="breakdown" id="id_breakdown">
           <option value="overall" {% if prefill_breakdown == "overall" %}selected{% endif %}>Alla</option>
           <option value="sex" {% if prefill_breakdown == "sex" %}selected{% endif %}>Kön</option>
           <option value="age" {% if prefill_breakdown == "age" %}selected{% endif %}>Åldersgrupp</option>
           <option value="side" {% if prefill_breakdown == "side" %}selected{% endif %}>Sida</option>
           <option value="relation" {% if prefill_breakdown == "relation" %}selected{% endif %}>Relation</option>
+        </select>
+      </label>
+      <label>Stil
+        <select name="style" id="id_style">
+          <option value="generic" {% if state.style == "generic" %}selected{% endif %}>Standard</option>
+          <option value="podium" data-requires-type="multiple_choice" data-requires-breakdown="overall" {% if state.style == "podium" %}selected{% endif %}>Podium (kräver flervalsfråga, uppdelning "Alla")</option>
+          <option value="bouquet" data-requires-type="boolean" data-requires-breakdown="overall" {% if state.style == "bouquet" %}selected{% endif %}>Bukett (kräver ja/nej-fråga, uppdelning "Alla")</option>
         </select>
       </label>
       <label>Beräkning (endast nummer-frågor)
@@ -53,10 +60,49 @@
         <button type="submit" name="action" value="reveal">Visa resultat</button>
       </div>
     </form>
+    <p style="color:var(--mist);font-size:0.9rem;margin-top:-0.4rem">
+      Podium och Bukett passar bara sin egen frågetyp (se hakparenteserna ovan) — väljer du
+      en fråga/uppdelning den inte passar för visar storbilden Standard istället.
+    </p>
 
     <span class="host-status{% if state.revealed %} host-status--live{% endif %}">
       {% if state.revealed %}● Resultat visas{% else %}○ Väntar{% endif %}
     </span>
+
+    <script>
+      // Disables Stil options that style_is_compatible() (pulse/views.py) would reject for
+      // the currently picked Fråga/Uppdelning, so the host isn't offered a combination
+      // that's about to be silently downgraded to Standard on reveal -- that check itself
+      // still runs server-side, this is purely a UI hint mirroring it.
+      (function () {
+        var questionSelect = document.getElementById("id_question");
+        var breakdownSelect = document.getElementById("id_breakdown");
+        var styleSelect = document.getElementById("id_style");
+
+        function currentQuestionType() {
+          var opt = questionSelect.options[questionSelect.selectedIndex];
+          return opt ? opt.dataset.qtype : undefined;
+        }
+
+        function refresh() {
+          var qtype = currentQuestionType();
+          var breakdown = breakdownSelect.value;
+          var selectedNowInvalid = false;
+          Array.prototype.forEach.call(styleSelect.options, function (opt) {
+            var requiresType = opt.dataset.requiresType;
+            if (!requiresType) return; // "generic" always fits
+            var fits = qtype === requiresType && breakdown === opt.dataset.requiresBreakdown;
+            opt.disabled = !fits;
+            if (opt.disabled && opt.selected) selectedNowInvalid = true;
+          });
+          if (selectedNowInvalid) styleSelect.value = "generic";
+        }
+
+        questionSelect.addEventListener("change", refresh);
+        breakdownSelect.addEventListener("change", refresh);
+        refresh();
+      })();
+    </script>
 
     <section class="suggestions">
       <h2>Intressanta fynd</h2>

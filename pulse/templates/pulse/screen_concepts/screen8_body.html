@@ -1,0 +1,123 @@
+<!-- SVG filters used across the board, no visible geometry -->
+<svg width="0" height="0" style="position:absolute">
+  <filter id="chalkRough" x="-30%" y="-30%" width="160%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="noise"/>
+    <feDisplacementMap in="SourceGraphic" in2="noise" scale="4.2" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+  <filter id="bulbGlow" x="-200%" y="-200%" width="500%" height="500%">
+    <feGaussianBlur stdDeviation="4" result="blur"/>
+    <feMerge>
+      <feMergeNode in="blur"/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+</svg>
+
+<div class="screen">
+  <div class="board">
+
+    <!-- bunting flags strung across the top of the board -->
+    <svg class="bunting" viewBox="0 0 1920 150" preserveAspectRatio="none">
+      <path class="string" d="M0,20 Q960,120 1920,20"></path>
+      <!-- flags placed along the string curve, alternating warm chalk pastels -->
+      <g stroke="#1c2120" stroke-width="1.5">
+        <polygon points="172,38 212,38 192,86" fill="#f0b3c4"></polygon>
+        <polygon points="364,52 404,52 384,102" fill="#f3d98a"></polygon>
+        <polygon points="556,62 596,62 576,114" fill="#e9e2d0"></polygon>
+        <polygon points="748,68 788,68 768,122" fill="#a7c9bd"></polygon>
+        <polygon points="940,70 980,70 960,124" fill="#f0b3c4"></polygon>
+        <polygon points="1132,68 1172,68 1152,122" fill="#f3d98a"></polygon>
+        <polygon points="1324,62 1364,62 1344,114" fill="#e9e2d0"></polygon>
+        <polygon points="1516,52 1556,52 1536,102" fill="#a7c9bd"></polygon>
+        <polygon points="1708,38 1748,38 1728,86" fill="#f0b3c4"></polygon>
+      </g>
+    </svg>
+
+    <!-- warm string lights along the bottom edge -->
+    <svg class="lights" viewBox="0 0 1920 90" preserveAspectRatio="none">
+      <path class="string" d="M0,10 Q960,70 1920,10"></path>
+      <g class="bulb-glow">
+        <circle cx="192" cy="27" r="6" fill="#f6c96a" style="animation: twinkle 3.4s ease-in-out infinite; animation-delay: -0.2s;"></circle>
+        <circle cx="384" cy="41" r="6" fill="#f2a35f" style="animation: twinkle 3.1s ease-in-out infinite; animation-delay: -1.1s;"></circle>
+        <circle cx="576" cy="52" r="6" fill="#f6c96a" style="animation: twinkle 3.7s ease-in-out infinite; animation-delay: -0.6s;"></circle>
+        <circle cx="768" cy="58" r="6" fill="#f2a35f" style="animation: twinkle 2.9s ease-in-out infinite; animation-delay: -1.8s;"></circle>
+        <circle cx="960" cy="60" r="6" fill="#f6c96a" style="animation: twinkle 3.3s ease-in-out infinite; animation-delay: -0.4s;"></circle>
+        <circle cx="1152" cy="58" r="6" fill="#f2a35f" style="animation: twinkle 3.6s ease-in-out infinite; animation-delay: -1.4s;"></circle>
+        <circle cx="1344" cy="52" r="6" fill="#f6c96a" style="animation: twinkle 3.0s ease-in-out infinite; animation-delay: -0.9s;"></circle>
+        <circle cx="1536" cy="41" r="6" fill="#f2a35f" style="animation: twinkle 3.5s ease-in-out infinite; animation-delay: -0.3s;"></circle>
+        <circle cx="1728" cy="27" r="6" fill="#f6c96a" style="animation: twinkle 3.2s ease-in-out infinite; animation-delay: -1.6s;"></circle>
+      </g>
+    </svg>
+
+    <div class="content">
+
+      <div class="kicker-row rough">
+        <svg class="kicker-icon" viewBox="0 0 48 48" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 18h26v11a9 9 0 0 1-9 9h-8a9 9 0 0 1-9-9V18Z"></path>
+          <path d="M34 21h3a5 5 0 0 1 0 10h-3"></path>
+          <path d="M14 12c0-2 2-2 2-4s-2-2-2-4"></path>
+          <path d="M22 12c0-2 2-2 2-4s-2-2-2-4"></path>
+        </svg>
+        <span class="kicker">DAGENS REKORD</span>
+        <svg class="kicker-icon" viewBox="0 0 64 64" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M32,6 A26,26 0 1 1 6,32 A20,20 0 1 1 32,52 A14,14 0 1 1 46,32 A8,8 0 1 1 32,16"></path>
+        </svg>
+      </div>
+
+      <svg class="underline-doodle" viewBox="0 0 360 22" preserveAspectRatio="none">
+        <path d="M4,12 C60,4 110,18 180,10 C250,3 300,17 356,9" fill="none" stroke-width="3" stroke-linecap="round"></path>
+      </svg>
+
+      <div class="question rough">
+        <span class="q-mark">&ldquo;</span>Hur m&aring;nga kanelbullar kan du &auml;ta i ett str&auml;ck?<span class="q-mark">&rdquo;</span>
+      </div>
+
+      <div class="hero">
+        <div class="circle-wrap">
+          <svg class="circle-doodle" viewBox="0 0 486 486">
+            <path d="M 243,20
+                     C 360,18 462,110 468,238
+                     C 474,362 378,462 250,466
+                     C 128,470 24,378 20,252
+                     C 17,132 118,26 243,20 Z"
+                  fill="none" stroke-width="6" stroke-linecap="round"></path>
+          </svg>
+
+          <svg class="sparkle sp1" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+            <line x1="12" y1="1" x2="12" y2="23"></line>
+            <line x1="1" y1="12" x2="23" y2="12"></line>
+          </svg>
+          <svg class="sparkle sp2" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+            <line x1="12" y1="1" x2="12" y2="23"></line>
+            <line x1="1" y1="12" x2="23" y2="12"></line>
+          </svg>
+          <svg class="sparkle sp3" viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round">
+            <line x1="12" y1="1" x2="12" y2="23"></line>
+            <line x1="1" y1="12" x2="23" y2="12"></line>
+          </svg>
+
+          <div class="number rough">10</div>
+        </div>
+
+        <div class="unit rough">KANELBULLAR</div>
+        <div class="script-line">i ett str&auml;ck</div>
+      </div>
+
+      <div class="badge-wrap">
+        <svg class="badge-doodle" viewBox="0 0 132 132">
+          <path d="M 66,8
+                   C 100,7 124,34 125,66
+                   C 126,98 100,124 67,125
+                   C 36,126 8,100 7,67
+                   C 6,35 33,9 66,8 Z"
+                fill="none" stroke-width="3" stroke-linecap="round"></path>
+        </svg>
+        <div class="badge-text">
+          <span class="n">126</span>
+          <span class="s">svar</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

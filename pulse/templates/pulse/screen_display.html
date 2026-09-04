@@ -6,11 +6,52 @@
   <title>Party Pulse</title>
   <script src="{% static 'pulse/vendor/htmx.min.js' %}"></script>
   <link rel="stylesheet" href="{% static 'pulse/style.css' %}">
+
+  {# Podium/Bouquet reveal styles (see pulse/views.style_is_compatible and PLAN.md "Big-
+     screen design exploration") -- loaded unconditionally here, once, rather than inside
+     the polled _screen_state.html fragment, for two reasons: fonts only need fetching
+     once regardless of how many 2s polls happen while revealed, and the scoped stylesheet
+     below (class-prefixed .style-podium/.style-bouquet, see screen_styles.css) would
+     otherwise collide with style.css's own .eyebrow if it were duplicated per-poll. #}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Barlow+Semi+Condensed:wght@500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Parisienne&display=swap">
+  <link rel="stylesheet" href="{% static 'pulse/screen_styles.css' %}">
+  <style>
+    /* Podium/Bouquet are fixed 1920x1080 canvases (see screen_styles/_podium.html and
+       _bouquet.html) -- authored for the design exploration's artboards, not for this
+       page's fluid .screen layout. #style-canvas-viewport escapes .screen's flex/padding
+       (position:fixed is relative to the viewport, not its DOM parent) and the JS below
+       scales #style-canvas to fit whatever's actually plugged in -- a laptop preview
+       window or a 4K projector -- the same "fit to screen" approach as the standalone
+       /screen/concepts/<n>/ previews. Absent for GENERIC reveals and the idle/question-only
+       states, which still render through .screen normally. */
+    #style-canvas-viewport { position: fixed; inset: 0; overflow: hidden; z-index: 1; }
+    #style-canvas { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; transform-origin: top left; }
+  </style>
 </head>
 <body>
   <div id="screen-state" class="screen" hx-get="{% url 'screen-state' %}" hx-trigger="load, every 2s" hx-swap="innerHTML">
     <p class="screen-word">Party<span>Pulse</span></p>
     {% include "pulse/_pulse_line.html" with animated=True %}
   </div>
+  <script>
+    // Bound once on the outer page (not inside the polled fragment -- htmx swaps
+    // #screen-state's innerHTML every 2s, and re-attaching a resize listener each time
+    // would leak one per poll). htmx:afterSwap covers every poll; the two direct calls
+    // below cover the very first paint and any projector/window resize in between.
+    (function () {
+      function fitStyleCanvas() {
+        var stage = document.getElementById("style-canvas");
+        if (!stage) return; // GENERIC / idle states render through .screen, not this canvas
+        var scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+        stage.style.transform = "scale(" + scale + ")";
+        stage.style.left = ((window.innerWidth - 1920 * scale) / 2) + "px";
+        stage.style.top = ((window.innerHeight - 1080 * scale) / 2) + "px";
+      }
+      document.body.addEventListener("htmx:afterSwap", fitStyleCanvas);
+      window.addEventListener("resize", fitStyleCanvas);
+      fitStyleCanvas();
+    })();
+  </script>
 </body>
 </html>

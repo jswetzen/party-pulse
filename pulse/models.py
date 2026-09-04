@@ -198,9 +198,28 @@ class BigScreenState(models.Model):
         MAX = "max", "Max"
         COUNT_ABOVE_THRESHOLD = "count_above_threshold", "Antal över tröskel"
 
+    class Style(models.TextChoices):
+        # GENERIC is today's bar-chart _screen_state.html markup, unchanged -- it fits any
+        # question/breakdown, which is why it's also the fallback whenever PODIUM/BOUQUET
+        # is picked for a combination they don't actually fit (see
+        # views.style_is_compatible). PODIUM and BOUQUET came out of the 10-concept design
+        # exploration (see PLAN.md "Big-screen design exploration") and are each built
+        # around one specific data shape rather than being general-purpose:
+        #   PODIUM  -- ranks a single set of labelled scores. Only a real fit for a
+        #              multiple-choice question's options (breakdown=OVERALL: a per-group
+        #              breakdown would be several separate option distributions, not one
+        #              ranked list).
+        #   BOUQUET -- a single ja/nej split rendered as one two-ended vine. Only a real fit
+        #              for a boolean question at breakdown=OVERALL (a per-group breakdown
+        #              would be several splits -- a different design, not a resize of this one).
+        GENERIC = "generic", "Standard"
+        PODIUM = "podium", "Podium"
+        BOUQUET = "bouquet", "Bukett"
+
     mode = models.CharField(max_length=20, choices=Mode.choices, default=Mode.STATISTICS)
     question = models.ForeignKey(Question, null=True, blank=True, on_delete=models.SET_NULL)
     breakdown = models.CharField(max_length=10, choices=Breakdown.choices, default=Breakdown.OVERALL)
+    style = models.CharField(max_length=10, choices=Style.choices, default=Style.GENERIC)
     aggregation = models.CharField(max_length=25, choices=Aggregation.choices, null=True, blank=True)
     aggregation_threshold = models.FloatField(
         null=True, blank=True, help_text="Tröskelvärde för 'Antal över tröskel'."

@@ -1,0 +1,5 @@
+{% extends "pulse/screen_concept_base.html" %}
+{# concept_title is set as page context in the view, not here, so the <title> tag
+   in the base template renders it -- keep this file to the two include blocks only. #}
+{% block head_extra %}{% include "pulse/screen_concepts/screen5_head.html" %}{% endblock %}
+{% block content %}{% include "pulse/screen_concepts/screen5_body.html" %}{% endblock %}
