@@ -101,6 +101,42 @@ but that's a UI hint mirroring the real check, not the check itself.
   choice in the moment during the reception rather than once while writing the question
   bank.
 
+## Session summary (2026-09-04, later)
+
+Asked to check why Bouquet "doesn't feel like an integrated page, more like an iframe."
+Confirmed by screenshotting the live `/screen/` route (headless Chrome at a deliberately
+non-16:9 window size, `192.168.1.59:8000`) rather than just reading the templates — the
+bug wasn't visible from the source alone. Two separate causes, both now fixed:
+
+1. **A raw template comment was rendering as visible page text.** `screen_display.html`'s
+   head comment used `{# ... #}` across multiple lines; Django's inline comment tag does
+   not support multi-line content (confirmed directly against this project's Django 6.0 —
+   the un-parsed `{# #}` is left as literal text). That text sat in `<head>`, and HTML5
+   parsing kicks a stray non-whitespace character token out of `<head>` into the top of
+   `<body>` — so the entire comment string rendered at the very top of *every* `/screen/`
+   page load, Podium included. It's just much harder to notice on Podium (near-black text
+   on a near-black stage) than on Bouquet (visible cream-on-ink text sitting above a pale
+   card). Fixed by switching to the `comment`/`endcomment` block tag, which does support
+   multi-line content.
+2. **The letterbox behind the scaled canvas had no background.** `#style-canvas-viewport`
+   is `position:fixed;inset:0` with no `background`, so whenever the scaled 1920×1080
+   `#style-canvas` doesn't exactly fill the real viewport's aspect ratio (true for almost
+   any real window/projector), the gap showed `body`'s dark `--ink` straight through —
+   a hard seam around Bouquet's pale wedding-stationery card that read as "a box floating
+   on a different page." Fixed by giving `#style-canvas-viewport.style-bouquet` a solid
+   background matching the outer stop of `.style-bouquet .stage`'s own radial-gradient
+   (`#ece0c6`), so the letterbox is invisible instead of off-brand.
+
+Podium's letterbox seam is the same mechanism, initially left alone since it wasn't the one
+asked for and its dark stage made the seam much less obvious — then fixed on request right
+after, the same way: `#style-canvas-viewport.style-podium` gets `.stage`'s own base
+linear-gradient (`180deg, #1c0716 0%, #170513 45%, #0c0209 100%`, minus the centered radial
+spotlight glow, which only makes sense within the stage itself) rather than a flat color, so
+the vertical letterbox bars fade into the same gradient instead of a mismatched solid.
+
+All 82 tests still pass (`uv run pytest`); this was a template/CSS fix, no test coverage
+changed. Verified visually with before/after screenshots, not just by reading the diff.
+
 ## Possible next steps
 
 Roughly in order of how self-contained each one is — none of this is started.

@@ -18,6 +18,13 @@
 
 .style-podium * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Same letterbox-seam fix as .style-bouquet below (see that comment for the full
+   explanation) -- reuses .stage's own base linear-gradient (minus the centered radial
+   spotlight glow, which only makes sense within the stage itself) so the fixed-canvas
+   letterbox bars fade into the same dark plum instead of a flat color that'd mismatch
+   the gradient's lighter top stop. */
+#style-canvas-viewport.style-podium { background: linear-gradient(180deg, #1c0716 0%, #170513 45%, #0c0209 100%); }
+
 .style-podium .stage {
       position: relative;
       width: 1920px;
@@ -307,6 +314,17 @@
       color: #f0c163;
     }
 .style-bouquet * { box-sizing: border-box; }
+
+/* #style-canvas-viewport (screen_display.html) is position:fixed;inset:0 with no
+   background of its own, so whenever the scaled 1920x1080 #style-canvas doesn't exactly
+   fill the real viewport's aspect ratio, the letterbox gap showed body's dark --ink
+   (style.css) straight through -- a hard, off-brand seam around .stage's pale wedding-
+   stationery cream that read as "a box floating on a different page" rather than a design
+   filling the screen. Matching the outer stop of .stage's own radial-gradient here instead
+   makes the letterbox invisible: the card just is the page. Podium gets the equivalent fix
+   next to its own .stage rule above (#style-canvas-viewport.style-podium), since its stage
+   background is dark but not identical to --ink. */
+#style-canvas-viewport.style-bouquet { background: #ece0c6; }
 
 .style-bouquet .stage {
       width: 1920px;

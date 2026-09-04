@@ -8,12 +8,12 @@
   {% include "pulse/_pulse_line.html" with animated=True %}
 
 {% elif effective_style == "podium" %}
-  <div id="style-canvas-viewport"><div id="style-canvas">
+  <div id="style-canvas-viewport" class="style-podium"><div id="style-canvas">
     {% include "pulse/screen_styles/_podium.html" %}
   </div></div>
 
 {% elif effective_style == "bouquet" %}
-  <div id="style-canvas-viewport"><div id="style-canvas">
+  <div id="style-canvas-viewport" class="style-bouquet"><div id="style-canvas">
     {% include "pulse/screen_styles/_bouquet.html" %}
   </div></div>
 
