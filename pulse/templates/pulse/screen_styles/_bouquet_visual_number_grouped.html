@@ -1,0 +1,29 @@
+{% comment %}
+Bouquet's number_grouped diagram type ("Ribbon Rows"): one row per group, each just a
+flower + the group's own single aggregated value + the aggregation tag ("MEDEL", "MEDIAN",
+...) -- no shared axis or scale drawn behind the rows, same reasoning as the single-group
+_bouquet_visual_number.html (views._bouquet_geometry_number_grouped's docstring). The tag
+text is identical on every row (one BigScreenState.aggregation setting governs the whole
+reveal), but is still rendered per row rather than once for the whole diagram -- same
+"caption sits right next to its own number" layout the Generalization mockup used, so a row
+reads correctly in isolation without the eye having to hunt for a shared label elsewhere.
+
+Every coordinate is page-absolute within the 1920x1080 stage (same convention as the other
+grouped partials), so `.ng-visual` sits at inset:0.
+{% endcomment %}
+<div class="ng-visual">
+  {% for row in bouquet.rows %}
+    <div class="ng-label" style="top:{{ row.row_center }}px; left:{{ bouquet.label_left }}px; width:{{ bouquet.label_width }}px">
+      <span class="ng-gname" style="font-size:{{ bouquet.name_font_size }}px">{{ row.label }}</span>
+      <span class="ng-gcount" style="font-size:{{ bouquet.count_font_size }}px">{{ row.count }} svar</span>
+    </div>
+
+    <svg class="ng-bloom" width="{{ bouquet.flower_size }}" height="{{ bouquet.flower_size }}" viewBox="-24 -24 48 48"
+         style="left:{{ bouquet.flower_left }}px; top:{{ row.row_center }}px">
+      <use href="#bq-blossom"></use>
+    </svg>
+
+    <div class="ng-value" style="left:{{ bouquet.value_left }}px; top:{{ row.row_center }}px; font-size:{{ bouquet.value_font_size }}px">{{ row.value|floatformat:1 }}</div>
+    <div class="ng-tag" style="left:{{ bouquet.tag_left }}px; top:{{ row.row_center }}px; font-size:{{ bouquet.tag_font_size }}px">{{ bouquet.aggregation_label }}</div>
+  {% endfor %}
+</div>

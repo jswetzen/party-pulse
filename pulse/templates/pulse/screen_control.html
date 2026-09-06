@@ -39,7 +39,7 @@
         <select name="style" id="id_style">
           <option value="generic" {% if state.style == "generic" %}selected{% endif %}>Standard</option>
           <option value="podium" data-requires-type="multiple_choice" data-requires-breakdown="overall" {% if state.style == "podium" %}selected{% endif %}>Podium (kräver flervalsfråga, uppdelning "Alla")</option>
-          <option value="bouquet" data-requires-type="boolean" data-requires-breakdown="overall" {% if state.style == "bouquet" %}selected{% endif %}>Bukett (kräver ja/nej-fråga, uppdelning "Alla")</option>
+          <option value="bouquet" {% if state.style == "bouquet" %}selected{% endif %}>Bukett</option>
         </select>
       </label>
       <label>Beräkning (endast nummer-frågor)
@@ -61,8 +61,10 @@
       </div>
     </form>
     <p style="color:var(--mist);font-size:0.9rem;margin-top:-0.4rem">
-      Podium och Bukett passar bara sin egen frågetyp (se hakparenteserna ovan) — väljer du
-      en fråga/uppdelning den inte passar för visar storbilden Standard istället.
+      Podium passar bara flervalsfrågor vid uppdelning "Alla" (se hakparentesen ovan); Bukett
+      passar precis som Standard — vilken frågetyp och uppdelning som helst, med en egen
+      bukettbild per frågetyp (en enda bild vid "Alla", en rad per grupp annars) — väljer du
+      en kombination som inte passar visar storbilden Standard istället.
     </p>
 
     <span class="host-status{% if state.revealed %} host-status--live{% endif %}">
@@ -90,8 +92,13 @@
           var selectedNowInvalid = false;
           Array.prototype.forEach.call(styleSelect.options, function (opt) {
             var requiresType = opt.dataset.requiresType;
-            if (!requiresType) return; // "generic" always fits
-            var fits = qtype === requiresType && breakdown === opt.dataset.requiresBreakdown;
+            var requiresBreakdown = opt.dataset.requiresBreakdown;
+            if (!requiresType && !requiresBreakdown) return; // "generic" and "bouquet" both always fit
+            // Only Podium declares either constraint (data-requires-type="multiple_choice"
+            // data-requires-breakdown="overall") -- Bukett fits any question type at any
+            // breakdown now, same as Standard (see views.style_is_compatible), so its
+            // <option> carries neither attribute and is skipped by the check above.
+            var fits = (!requiresType || qtype === requiresType) && (!requiresBreakdown || breakdown === requiresBreakdown);
             opt.disabled = !fits;
             if (opt.disabled && opt.selected) selectedNowInvalid = true;
           });

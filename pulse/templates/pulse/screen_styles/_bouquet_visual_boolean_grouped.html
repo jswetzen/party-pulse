@@ -1,0 +1,35 @@
+{% comment %}
+Bouquet's boolean_grouped diagram type ("Ribbon Rows"): one miniature two-color ja/nej
+track per group, geometry computed by views._bouquet_geometry_boolean_grouped. Each row's
+track is split at that group's own real yes_pct; a single seam flower sits at the boundary,
+colored to whichever side actually won (see .bg-seam-nej's hue-rotate filter in
+screen_styles.css -- it reuses #bq-blossom's shape via <use>, same as every other flower in
+Bouquet, rather than defining a second olive-toned glyph).
+
+Every coordinate here (row.row_top/row_center/seam_x/..., bouquet.track_left/label_left/...)
+is already page-absolute within the 1920x1080 stage, computed in Python -- same convention
+as _bouquet_visual_multiple_choice.html -- so this partial gets its own `.bg-visual` wrapper
+at inset:0 rather than the single-group boolean diagram's `.visual` (CSS top:430px baked in,
+sized for exactly one split, not N of them).
+{% endcomment %}
+<div class="bg-visual">
+  {% for row in bouquet.rows %}
+    <div class="bg-label" style="top:{{ row.row_center }}px; left:{{ bouquet.label_left }}px; width:{{ bouquet.label_width }}px">
+      <span class="bg-gname" style="font-size:{{ bouquet.name_font_size }}px">{{ row.label }}</span>
+      <span class="bg-gcount" style="font-size:{{ bouquet.count_font_size }}px">{{ row.count }} svar</span>
+    </div>
+
+    <div class="bg-track" style="top:{{ row.row_center }}px; left:{{ bouquet.track_left }}px; width:{{ bouquet.track_width }}px">
+      <div class="bg-seg bg-seg-ja" style="width:{{ row.ja_seg_width }}px"></div>
+      <div class="bg-seg bg-seg-nej" style="left:{{ row.ja_seg_width }}px; width:{{ row.nej_seg_width }}px"></div>
+    </div>
+
+    <div class="bg-pct bg-pct-ja" style="top:{{ row.row_center }}px; left:{{ row.ja_label_x }}px; font-size:{{ bouquet.pct_font_size }}px">{{ row.yes_pct }}% ja</div>
+    <div class="bg-pct bg-pct-nej" style="top:{{ row.row_center }}px; left:{{ row.nej_label_x }}px; font-size:{{ bouquet.pct_font_size }}px">{{ row.nej_pct }}% nej</div>
+
+    <svg class="bg-seam bg-seam-{{ row.winner }}" width="{{ bouquet.flower_size }}" height="{{ bouquet.flower_size }}"
+         viewBox="-24 -24 48 48" style="top:{{ row.row_center }}px; left:{{ row.seam_x }}px">
+      <use href="#bq-blossom"></use>
+    </svg>
+  {% endfor %}
+</div>

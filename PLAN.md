@@ -139,22 +139,31 @@ next to breakdown/aggregation) rather than a global theme, gated to the shape th
 - **Podium** ranks a single set of labelled scores as a 1st/2nd/3rd stage plus a supporting list —
   only a real fit for a multiple-choice question's options at breakdown=Alla (a per-group
   breakdown would be several separate option distributions, not one ranked list).
-- **Bouquet** shows one ja/nej split as a single two-ended vine — only a real fit for a boolean
-  question at breakdown=Alla (a per-group breakdown would be several splits, a different design).
+- **Bouquet** has one botanical diagram per `Question.Type` (added 2026-09-05, initially shipped
+  boolean-only): a boolean split as a two-ended vine, multiple-choice options as a fanned
+  arrangement (one stem per option, height = real pct, tallest centered), a number question's
+  aggregated value as a single centerpiece stem (no fabricated min/max scaling — NUMBER questions
+  have no declared domain). That trio is breakdown=Alla only; as of 2026-09-06 every other
+  breakdown gets a "Ribbon Rows" sibling of each — one horizontal row per group, generalizing the
+  same idea (a shrunken ja/nej track, a strung-bloom stem ranked left-to-right, a flower+value)
+  instead of inventing a fourth layout — so Bouquet is now as breakdown-permissive as GENERIC.
+  Podium is unchanged (still multiple-choice + breakdown=Alla only).
 
 Picking an incompatible style for the currently revealed question (or revealing before anyone's
 answered) falls back to today's GENERIC bar-chart markup rather than rendering a broken visual —
 enforced server-side in `screen_state()`, mirrored (not duplicated) by a small script in
 `screen_control.html` that just disables the options that would fall back, so the host isn't
 offered a choice that's about to be silently downgraded. See `pulse/views.py`
-(`style_is_compatible`, `_rank_podium`, `_bouquet_geometry`, `screen_state`) and
-`pulse/templates/pulse/screen_styles/`. Covered by `pulse/tests/test_screen_styles.py`.
+(`style_is_compatible`, `_rank_podium`, `_bouquet_geometry_boolean`/`_multiple_choice`/`_number`
+and their `_grouped` siblings, `screen_state`) and `pulse/templates/pulse/screen_styles/`. Covered
+by `pulse/tests/test_screen_styles.py`. Full story (including the real-data legibility issues
+found and fixed along the way) in `docs/screen-styles.md`'s session summaries.
 
 Not done: the other 8 concepts stay as static previews only, no BigScreenState style for them
 unless one gets picked later; Podium's "rank breakdown groups too" extension (discussed and
 deliberately deferred — see conversation history — since it needs the podium/pillar layout
-reworked for a variable item count, not just a data-source swap) and a per-question default style
-saved on `Question` (so the host doesn't have to repick it live during the reception) are both
+reworked for a variable item count, not just a data-source swap), and a per-question default style
+saved on `Question` (so the host doesn't have to repick it live during the reception) are all
 possible follow-ups, not started.
 
 ## Refinements made while scaffolding (gaps in the original idea)

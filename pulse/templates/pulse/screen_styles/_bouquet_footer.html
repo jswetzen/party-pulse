@@ -1,0 +1,15 @@
+{% comment %}
+Bouquet's bottom rule + respondent count -- identical across all three diagram types
+(boolean/multiple_choice/number), so shared rather than duplicated. bouquet.is_near_tie is
+only ever set by _bouquet_geometry_boolean; Django's dict lookup just renders falsy for the
+other two kinds, so the subcount line below safely never fires for them.
+{% endcomment %}
+<svg class="rule" viewBox="0 0 200 26">
+  <line x1="0" y1="13" x2="86" y2="13" stroke="#a9803f" stroke-width="1" opacity="0.5"></line>
+  <line x1="114" y1="13" x2="200" y2="13" stroke="#a9803f" stroke-width="1" opacity="0.5"></line>
+  <path d="M100,6 L104,13 L100,20 L96,13 Z" fill="#c9a45f" fill-opacity="0.7" stroke="#a9803f" stroke-width="0.8"></path>
+</svg>
+<div class="count"><b>{{ bouquet.count }}</b> svar</div>
+{% if bouquet.is_near_tie %}
+  <div class="subcount">nästan jämnt delat</div>
+{% endif %}

@@ -1,0 +1,47 @@
+{% comment %}
+Bouquet's multiple_choice diagram type: a fanned arrangement, one stem per option, growing
+from a shared baseline -- geometry computed by views._bouquet_geometry_multiple_choice
+(centre-out by rank, stem height linear in the real pct). Added 2026-09-05 alongside the
+number diagram type when Bouquet grew past its original boolean-only shape (see
+_bouquet_decor.html's comment / docs/screen-styles.md "Possible next steps" #1).
+
+Unlike _bouquet_visual_boolean.html's `.visual` wrapper (CSS top:430px baked in), every
+coordinate here (bouquet.baseline_y, bouquet.label_top, each stem's x/stem_top/num_top) is
+already page-absolute within the 1920x1080 stage -- so this partial gets its own `.mc-visual`
+wrapper at inset:0 (see screen_styles.css) rather than reusing `.visual`.
+
+Each stem is: a curved stalk (SVG path in a local 0..48 x 0..stem_height viewBox, local
+y=0 is the blossom end / top, y=stem_height is the baseline end / bottom -- so a leaf can
+be dropped at the stalk's own local midpoint without any template arithmetic), a small
+leaf partway up (reusing #leaf/#leaf-r from _bouquet_decor.html's corner-sprig <defs>), the
+shared #bq-blossom glyph sized per-rank, the pct as a focal number above the blossom, and
+the option label below the baseline. Per the known headless-Chrome <use>-against-<symbol>
+bug (see _bouquet_decor.html), #bq-blossom/#leaf/#leaf-r are all plain <g>s referenced via
+<use> inside an outer <svg> that supplies its own viewBox -- no new <symbol> here either.
+{% endcomment %}
+<div class="mc-visual">
+
+  <div class="mc-baseline" style="top:{{ bouquet.baseline_y }}px"></div>
+
+  {% for stem in bouquet.stems %}
+    <svg class="mc-stalk" viewBox="0 0 48 {{ stem.stem_height }}" width="48" height="{{ stem.stem_height }}"
+         style="left:{{ stem.x }}px; top:{{ stem.stem_top }}px">
+      <path d="{{ stem.stalk_path }}" fill="none" stroke="#7c8c70" stroke-width="2.2" stroke-linecap="round"></path>
+      {% if stem.leaf_ref == "leaf" %}
+        <use href="#leaf" transform="translate(22,{% widthratio stem.stem_height 20 11 %}) rotate(48) scale(0.85)"></use>
+      {% else %}
+        <use href="#leaf-r" transform="translate(26,{% widthratio stem.stem_height 20 11 %}) rotate(-48) scale(0.85)"></use>
+      {% endif %}
+    </svg>
+
+    <svg class="mc-bloom" width="{{ stem.bloom_size }}" height="{{ stem.bloom_size }}" viewBox="-24 -24 48 48"
+         style="left:{{ stem.x }}px; top:{{ stem.stem_top }}px">
+      <use href="#bq-blossom"></use>
+    </svg>
+
+    <div class="mc-pct" style="left:{{ stem.x }}px; top:{{ stem.num_top }}px; font-size:{{ stem.num_font_size }}px">{{ stem.pct }}%</div>
+
+    <div class="mc-label" style="left:{{ stem.x }}px; top:{{ bouquet.label_top }}px; width:{{ stem.label_width }}px; font-size:{{ stem.label_font_size }}px">{{ stem.label }}</div>
+  {% endfor %}
+
+</div>

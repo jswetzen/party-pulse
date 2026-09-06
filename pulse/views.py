@@ -1,3 +1,5 @@
+import math
+
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import Http404, JsonResponse
@@ -209,16 +211,24 @@ def screen_display(request):
 
 def style_is_compatible(style: str, question: Question, breakdown: str) -> bool:
     """Whether `style` fits `question`'s type + `breakdown` well enough to reveal with --
-    see BigScreenState.Style for why PODIUM/BOUQUET each need one specific shape and
-    GENERIC (today's bar-chart markup) fits everything. Used by screen_state() below to
-    fall back to GENERIC rather than render a style against data it wasn't built for; the
-    control form mirrors this client-side (see screen_control.html's script) purely so the
-    host doesn't pick a combination that's about to be silently downgraded, but this is the
-    check that actually decides what gets rendered."""
+    see BigScreenState.Style for why PODIUM needs one specific shape (and GENERIC, today's
+    bar-chart markup, fits everything). Used by screen_state() below to fall back to
+    GENERIC rather than render a style against data it wasn't built for; the control form
+    mirrors this client-side (see screen_control.html's script) purely so the host doesn't
+    pick a combination that's about to be silently downgraded, but this is the check that
+    actually decides what gets rendered.
+
+    BOUQUET fits any question type at any breakdown -- it has one diagram type per
+    Question.Type at breakdown=OVERALL (_bouquet_geometry_boolean/_multiple_choice/_number)
+    and a "Ribbon Rows" per-group sibling of each for every other breakdown
+    (_bouquet_geometry_boolean_grouped/_multiple_choice_grouped/_number_grouped, added
+    2026-09-06 -- see docs/screen-styles.md's session summary of that date), so it's as
+    permissive as GENERIC. PODIUM stays the narrow one: it ranks a single set of labelled
+    scores, which only exists for a multiple-choice question's options at breakdown=OVERALL
+    -- a per-group breakdown would be several separate option distributions, not one ranked
+    list (see docs/screen-styles.md "Possible next steps" for that still-deferred extension)."""
     if style == BigScreenState.Style.PODIUM:
         return question.type == Question.Type.MULTIPLE_CHOICE and breakdown == BigScreenState.Breakdown.OVERALL
-    if style == BigScreenState.Style.BOUQUET:
-        return question.type == Question.Type.BOOLEAN and breakdown == BigScreenState.Breakdown.OVERALL
     return True
 
 
@@ -244,7 +254,7 @@ def _podium_question_font_size(text: str) -> int:
 
 
 # Bouquet's ja/nej "vine" track spans this fixed box inside the 1920x1080 stage (see
-# screen_styles/_bouquet.html); _bouquet_geometry() below places every element in it from
+# screen_styles/_bouquet.html); _bouquet_geometry_boolean() below places every element in it from
 # the real yes_pct, where the original mockup had these hand-placed for one specific
 # 51.1/48.9 split.
 _BOUQUET_TRACK_LEFT = 360
@@ -257,12 +267,13 @@ _BOUQUET_SEAM_HALF = 12
 _BOUQUET_NEAR_TIE_POINTS = 5
 
 
-def _bouquet_geometry(yes_pct: float, count: int) -> dict:
+def _bouquet_geometry_boolean(yes_pct: float, count: int) -> dict:
     nej_pct = round(100 - yes_pct, 1)
     boundary = round(_BOUQUET_TRACK_WIDTH * nej_pct / 100)  # 0..1200, relative to track-wrap
     seam_left = max(0, boundary - _BOUQUET_SEAM_HALF)
     seam_right = min(_BOUQUET_TRACK_WIDTH, boundary + _BOUQUET_SEAM_HALF)
     return {
+        "kind": "boolean",
         "yes_pct": yes_pct,
         "nej_pct": nej_pct,
         "count": count,
@@ -275,6 +286,406 @@ def _bouquet_geometry(yes_pct: float, count: int) -> dict:
         "ja_center": round(_BOUQUET_TRACK_LEFT + boundary + (_BOUQUET_TRACK_WIDTH - boundary) / 2),
         "marker_left": _BOUQUET_TRACK_LEFT + boundary,
         "is_near_tie": abs(yes_pct - 50) <= _BOUQUET_NEAR_TIE_POINTS,
+    }
+
+
+# Bouquet's multiple_choice "fanned arrangement" diagram type (see
+# screen_styles/_bouquet_visual_multiple_choice.html) -- one stem per option inside this
+# fixed box, added 2026-09-05 alongside the number diagram type when Bouquet grew past its
+# original boolean-only shape (see docs/screen-styles.md "Possible next steps" #1).
+_BOUQUET_MC_TRACK_LEFT = 210
+_BOUQUET_MC_TRACK_WIDTH = 1500
+_BOUQUET_MC_BASELINE_Y = 760
+_BOUQUET_MC_LABEL_TOP = _BOUQUET_MC_BASELINE_Y + 14
+_BOUQUET_MC_MIN_STEM = 70
+_BOUQUET_MC_MAX_STEM = 430
+# Gap between a stem's blossom and its percentage number, and the percentage number's own
+# rough text height -- both baked into num_top below so the template only ever places a
+# ready-made pixel, never does arithmetic (Django templates have no multiply/subtract
+# filters worth the noise -- see _bouquet_geometry_boolean's identical convention above).
+_BOUQUET_MC_NUM_GAP = 40
+
+
+def _bouquet_mc_slot_order(n: int) -> list[int]:
+    """Slot index (0-based, left-to-right) that each rank position (0-based, 0 = highest
+    pct) should occupy: centre-out, so the best-scoring option lands in the middle slot and
+    the rest flank it in descending order -- an arranged bouquet reads with its biggest
+    bloom at centre, not wherever the option happened to sort alphabetically. Ties broken
+    by slot index for determinism."""
+    mid = (n - 1) / 2
+    return sorted(range(n), key=lambda slot: (abs(slot - mid), slot))
+
+
+def _bouquet_mc_label_font_size(label: str) -> int:
+    """Stepped heuristic on character count, same idea as _podium_question_font_size --
+    labels sit in a fixed-width slot (track width / option count), not a responsive page."""
+    length = len(label)
+    if length <= 16:
+        return 24
+    if length <= 26:
+        return 20
+    if length <= 40:
+        return 17
+    return 15
+
+
+def _bouquet_mc_stalk_path(stem_height: int, curve_dir: int) -> str:
+    """SVG path `d` for one stem's stalk, a gentle bezier from the baseline (local y =
+    stem_height) up to the blossom (local y = 0) in a 48-wide local viewBox -- curve_dir
+    (+1/-1) alternates which way neighboring stems bow so the arrangement doesn't read as a
+    row of identical vertical rulers."""
+    ctrl1_y = round(stem_height * 0.62)
+    ctrl2_y = round(stem_height * 0.3)
+    return f"M24,{stem_height} C {24 + curve_dir * 14},{ctrl1_y} {24 + curve_dir * 10},{ctrl2_y} 24,0"
+
+
+def _bouquet_geometry_multiple_choice(options_pct: dict[str, float], count: int) -> dict:
+    """Stem height is linear in pct directly (0..100), matching GENERIC's own
+    `width:{{ pct }}%` bar-fill semantics rather than rescaling to the group's own max -- a
+    close race still reads as short, similar stems instead of an artificially dramatic
+    spread. Caller guards the "nobody's answered yet" case (empty options_pct)."""
+    ranked = sorted(options_pct.items(), key=lambda item: -item[1])
+    n = len(ranked)
+    slot_order = _bouquet_mc_slot_order(n)
+    slot_width = _BOUQUET_MC_TRACK_WIDTH / n
+    stems = [None] * n
+    for rank_index, (label, pct) in enumerate(ranked):
+        slot = slot_order[rank_index]
+        stem_height = round(_BOUQUET_MC_MIN_STEM + (pct / 100) * (_BOUQUET_MC_MAX_STEM - _BOUQUET_MC_MIN_STEM))
+        stem_top = _BOUQUET_MC_BASELINE_Y - stem_height
+        bloom_size = 108 if rank_index == 0 else (86 if rank_index < 3 else 68)
+        curve_dir = 1 if slot % 2 == 0 else -1
+        stems[slot] = {
+            "label": label,
+            "pct": pct,
+            "rank": rank_index + 1,
+            "x": round(_BOUQUET_MC_TRACK_LEFT + slot_width * (slot + 0.5)),
+            "stem_height": stem_height,
+            "stem_top": stem_top,
+            "stalk_path": _bouquet_mc_stalk_path(stem_height, curve_dir),
+            "bloom_size": bloom_size,
+            "num_top": stem_top - bloom_size // 2 - _BOUQUET_MC_NUM_GAP,
+            "num_font_size": 56 if rank_index == 0 else (42 if rank_index < 3 else 32),
+            "label_width": round(slot_width) - 24,
+            "label_font_size": _bouquet_mc_label_font_size(label),
+            "leaf_ref": "leaf" if slot % 2 == 0 else "leaf-r",
+        }
+    return {
+        "kind": "multiple_choice",
+        "count": count,
+        "baseline_y": _BOUQUET_MC_BASELINE_Y,
+        "label_top": _BOUQUET_MC_LABEL_TOP,
+        "stems": stems,  # left-to-right (list built by slot index)
+    }
+
+
+def _bouquet_geometry_number(value: float, aggregation: str | None, count: int) -> dict:
+    """The single aggregated value as one centerpiece stem -- deliberately not
+    spatially-scaled (no stem-height-by-magnitude like the multiple_choice diagram type
+    above), since NUMBER questions have no declared min/max in the schema (age, cinnamon
+    buns, coffee cups/day, ... are all the same `type=number` with wildly different ranges)
+    -- inventing a domain to plot against would visually imply a scale that isn't real.
+    Same "just show the number" semantics as GENERIC's own `.result-number`, dressed in
+    Bouquet's botanical voice instead of plotted as a fake gauge."""
+    aggregation = aggregation or BigScreenState.Aggregation.AVG
+    return {
+        "kind": "number",
+        "count": count,
+        "value": value,
+        "aggregation_label": dict(BigScreenState.Aggregation.choices)[aggregation],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Bouquet -- grouped ("Ribbon Rows") diagram types, added 2026-09-06 alongside widening
+# style_is_compatible() to accept any breakdown. The three single-group diagrams above
+# (_bouquet_geometry_boolean/_multiple_choice/_number) only ever plot breakdown=OVERALL's
+# one "Alla" group; these three plot every other breakdown's 2-5 groups (see
+# BigScreenState.Breakdown -- sex=2, side=3, relation=3, age=5), one horizontal row per
+# group, generalizing each single-group diagram's own visual idea into a row rather than
+# inventing a fourth unrelated layout. Picked after a real design-exploration pass (six
+# concept mockups, a design canvas, user feedback on legibility) landed on this "Ribbon
+# Rows" direction -- see docs/screen-styles.md's session summary of that date for the full
+# story, including the exact bloom-size/opacity formula the multiple_choice version below
+# reverse-engineers from that mockup's own annotated SVG comments.
+#
+# All three share the same vertical row band and left-hand group-label column -- defined
+# once here rather than per-kind -- so switching which question type is revealed at, say,
+# breakdown=age always plants its rows in the same place on the stage.
+# ---------------------------------------------------------------------------
+
+# The header above (eyebrow/headline/divider, see _bouquet.html) and the footer below
+# (rule/count, see _bouquet_footer.html) are unchanged for the grouped path, but a grouped
+# reveal also always shows the "uppdelat efter ..." subline (breakdown != OVERALL is exactly
+# when these functions run) right under the header's divider -- see .bq-subline in
+# screen_styles.css -- so the rows band starts a bit lower than a hypothetical
+# subline-less layout would allow, and stays well clear of the footer rule (top:872px).
+_BOUQUET_GROUPED_ROWS_TOP = 414
+_BOUQUET_GROUPED_ROWS_BOTTOM = 852
+# Left-hand "group name / N svar" column, shared by all three kinds so a host flipping
+# between question types at the same breakdown sees the group labels stay put.
+_BOUQUET_GROUPED_LABEL_LEFT = 140
+_BOUQUET_GROUPED_LABEL_WIDTH = 420
+# Horizontal region the data itself lives in (the ja/nej track for boolean, the strung-bloom
+# stem for multiple_choice, the flower+value for number) -- starts right after the label
+# column, ends comfortably inside the hairline stationery frame (frame's own inner edge is
+# at x=1866, see _bouquet_decor.html's .frame-rect).
+_BOUQUET_GROUPED_TRACK_LEFT = 620
+_BOUQUET_GROUPED_TRACK_WIDTH = 1160
+
+
+def _bouquet_grouped_label_font_sizes(row_height: float) -> tuple[int, int]:
+    """(group-name font size, "N svar" font size) for the shared left-hand label column --
+    scaled continuously with the row's own height (itself (rows band height) / (group
+    count), see the three geometry functions below) rather than fixed, so a 2-row breakdown
+    (sex) reads noticeably bigger than a 5-row one (age) instead of both using the same size
+    that only really fits the cramped case. Clamped at the low end so even 5 rows never dips
+    below this project's own legibility floor for supporting text."""
+    name_font = round(min(32, max(20, row_height * 0.16)))
+    count_font = round(min(16, max(13, row_height * 0.08)))
+    return name_font, count_font
+
+
+def _bouquet_geometry_boolean_grouped(breakdown: dict) -> dict:
+    """Ribbon Rows' boolean generalization: each group becomes one miniature two-color
+    ja/nej track (a shrunken version of _bouquet_geometry_boolean's single vine) instead of
+    one shared split -- see docs/screen-styles.md's Generalization mockup. Every row is the
+    same fixed track width, split at that row's own real yes_pct, with a single seam flower
+    colored to whichever side actually won that group (see .bg-seam-nej's hue-rotate filter
+    in screen_styles.css -- reusing #bq-blossom's shape, not redefining it, per
+    _bouquet_decor.html's own rule). Caller (screen_state()) guards the "nobody's answered
+    yet" case; every group in `breakdown` is guaranteed count > 0 (see aggregations._group)."""
+    items = list(breakdown.items())
+    n = len(items)
+    row_height = (_BOUQUET_GROUPED_ROWS_BOTTOM - _BOUQUET_GROUPED_ROWS_TOP) / n
+    name_font, count_font = _bouquet_grouped_label_font_sizes(row_height)
+    # Unlike multiple_choice_grouped, nothing here stacks vertically within a row (the
+    # flower and both pct labels all sit on the same horizontal line, vertically centered
+    # -- see the template's `translateY(-50%)`), so even 5 rows leave far more headroom than
+    # a single ~30px line needs; these floors are picked for legibility (this project's own
+    # "secondary numbers never below ~26px" standard), not because a tighter fit was forced
+    # by the row height the way multiple_choice_grouped's bloom_max is.
+    pct_font = round(min(34, max(22, row_height * 0.20)))
+    flower_size = round(min(56, max(32, row_height * 0.36)))
+    # Half the clearance kept between the seam flower and each pct label -- flower_size
+    # varies with row_height (see above), so a fixed CSS padding around the seam would
+    # either leave a gap that's too wide for a small flower or (as first tried) too narrow
+    # for a big one, with the flower painting right over the tail of the "ja"/"nej" text.
+    # Computed once here and applied per row below instead.
+    label_gap = round(flower_size / 2 + 10)
+
+    rows = []
+    total_count = 0
+    for i, (label, group) in enumerate(items):
+        yes_pct = group["yes_pct"]
+        nej_pct = round(100 - yes_pct, 1)
+        count = group["count"]
+        total_count += count
+        row_top = round(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
+        row_center = round(row_top + row_height / 2)
+        seam_x = round(_BOUQUET_GROUPED_TRACK_LEFT + _BOUQUET_GROUPED_TRACK_WIDTH * yes_pct / 100)
+        rows.append(
+            {
+                "label": label,
+                "count": count,
+                "yes_pct": yes_pct,
+                "nej_pct": nej_pct,
+                "row_top": row_top,
+                "row_center": row_center,
+                "seam_x": seam_x,
+                "ja_label_x": seam_x - label_gap,
+                "nej_label_x": seam_x + label_gap,
+                "ja_seg_width": seam_x - _BOUQUET_GROUPED_TRACK_LEFT,
+                "nej_seg_left": seam_x,
+                "nej_seg_width": _BOUQUET_GROUPED_TRACK_LEFT + _BOUQUET_GROUPED_TRACK_WIDTH - seam_x,
+                # >=50 rather than >50 so an exact tie renders as a (barely) ja-colored seam
+                # instead of picking arbitrarily -- ties are rare enough that which way this
+                # falls doesn't matter, it just needs to be deterministic.
+                "winner": "ja" if yes_pct >= 50 else "nej",
+            }
+        )
+    return {
+        "kind": "boolean_grouped",
+        "count": total_count,
+        "rows": rows,
+        "track_left": _BOUQUET_GROUPED_TRACK_LEFT,
+        "track_width": _BOUQUET_GROUPED_TRACK_WIDTH,
+        "label_left": _BOUQUET_GROUPED_LABEL_LEFT,
+        "label_width": _BOUQUET_GROUPED_LABEL_WIDTH,
+        "name_font_size": name_font,
+        "count_font_size": count_font,
+        "pct_font_size": pct_font,
+        "flower_size": flower_size,
+    }
+
+
+# Vertical clearance (px) kept between a bloom's own edge and the label text next to it.
+_BOUQUET_MCG_GAP = 5
+# A CSS line's rendered height in px per 1px of font-size -- used below to work out how much
+# vertical room a label of a given font-size actually needs, since Django templates can't do
+# that arithmetic themselves (same "pre-computed pixel, not template arithmetic" convention
+# as everywhere else in this file).
+_BOUQUET_MCG_LINE_HEIGHT = 1.2
+
+
+def _bouquet_geometry_multiple_choice_grouped(breakdown: dict) -> dict:
+    """Ribbon Rows' multiple_choice generalization -- see docs/screen-styles.md's RibbonRows
+    mockup. Unlike the single-group fan (_bouquet_geometry_multiple_choice), ordering here
+    is left-to-right by rank (highest pct first), not centre-out -- simpler, and reads
+    naturally alongside the ja/nej and number rows which are also left-to-right. Every
+    option in every group is strung, blossom-to-blossom, along one shared horizontal stem
+    per row; only the top-scoring bloom in each row gets a "Label pct%" line above the stem,
+    the rest get the same "Label pct%" in smaller type below it -- both always one line, not
+    two (an earlier version stacked a name line over a separate pct line for the winner,
+    which is exactly the RibbonRows mockup's own layout, but that mockup had roughly double
+    this app's real per-row vertical budget -- see the module comment on
+    _BOUQUET_GROUPED_ROWS_TOP -- so at 5 rows (AGE) two stacked lines collided with the row
+    above/below; one line fits everywhere the real header/footer chrome actually leaves).
+
+    Both bloom diameter and fill-opacity scale with the real pct, sqrt-scaled for diameter
+    (so *area*, the thing an eye actually compares between two blooms, tracks pct roughly
+    linearly, not diameter) -- the shape of this reverse-engineered from the RibbonRows
+    mockup's own annotated `d=.. op=..` SVG comments: every option's pct is normalized
+    against `global_max_pct`, the single highest pct anywhere in the whole breakdown (not
+    each row's own max), so the one truly best-scoring option across all groups reads as the
+    biggest, most saturated bloom on the whole stage and every other bloom is honestly
+    smaller/fainter relative to it: opacity = 0.30 + 0.60*(pct/global_max) (fit exactly to
+    the mockup's own numbers). The diameter formula itself is *not* copied verbatim, though
+    -- seeded 34..100px there against an ~180px-tall row, it would be oversized against this
+    app's real ~90px rows at 5 groups; see `bloom_max` below, sized backwards from how much
+    room is actually left over once this row's own label text has taken what it needs, so
+    text (the thing legibility rules actually care about, see docs/screen-styles.md) always
+    wins the space fight over bloom size, not the other way around.
+
+    A genuine tie for the top spot (two options at the same max pct within a row) is common
+    with small groups -- both get the winner's "above the stem" treatment, decided by `pct
+    == row's own max` rather than `rank == 0`, so a tie doesn't arbitrarily crown only one of
+    them."""
+    items = list(breakdown.items())
+    n = len(items)
+    row_height = (_BOUQUET_GROUPED_ROWS_BOTTOM - _BOUQUET_GROUPED_ROWS_TOP) / n
+    name_font, count_font = _bouquet_grouped_label_font_sizes(row_height)
+    global_max_pct = max(pct for _, group in items for pct in group["options_pct"].values())
+
+    # Font sizes are decided first (legibility floors win), then bloom_max is whatever
+    # vertical room is left in half a row after the taller (winner) label's own text height
+    # and the fixed gap are subtracted -- not the other way around -- so a label can never
+    # collide with the row above/below regardless of how many groups there are. See the
+    # docstring above for why this is backwards from a "pick a nice bloom size" design.
+    half_row = row_height / 2
+    winner_font = round(min(30, max(20, row_height * 0.15)))
+    other_font = round(min(20, max(15, row_height * 0.11)))
+    bloom_max = max(18, 2 * (half_row - _BOUQUET_MCG_GAP - winner_font * _BOUQUET_MCG_LINE_HEIGHT))
+    bloom_max = min(bloom_max, 100)  # never comically large just because a breakdown has 2 groups
+    bloom_min = max(14, 0.35 * bloom_max)
+
+    rows = []
+    total_count = 0
+    for i, (label, group) in enumerate(items):
+        count = group["count"]
+        total_count += count
+        row_top = round(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
+        row_center = round(row_top + row_height / 2)
+        # Stable sort keeps ties in their original (dict-insertion) order, same convention
+        # as _rank_podium/_bouquet_geometry_multiple_choice's identical sort call above.
+        ranked = sorted(group["options_pct"].items(), key=lambda item: -item[1])
+        row_max_pct = ranked[0][1]
+        m = len(ranked)
+        options = []
+        for rank_index, (opt_label, pct) in enumerate(ranked):
+            x = round(_BOUQUET_GROUPED_TRACK_LEFT + _BOUQUET_GROUPED_TRACK_WIDTH * (rank_index + 0.5) / m)
+            frac = pct / global_max_pct if global_max_pct else 0.0
+            bloom_size = round(bloom_min + (bloom_max - bloom_min) * math.sqrt(frac))
+            bloom_opacity = round(0.30 + 0.60 * frac, 2)
+            bloom_top = row_center - bloom_size / 2
+            bloom_bottom = row_center + bloom_size / 2
+            options.append(
+                {
+                    "label": opt_label,
+                    "pct": pct,
+                    "rank": rank_index + 1,
+                    "is_winner": pct == row_max_pct,
+                    "x": x,
+                    "bloom_size": bloom_size,
+                    "bloom_opacity": bloom_opacity,
+                    # Bottom-anchored (text grows upward) for the winner's label above the
+                    # bloom; top-anchored (text grows downward) for everyone else's below it
+                    # -- same convention as the single-group diagrams' own .mc-pct/.mc-label.
+                    "winner_label_top": round(bloom_top - _BOUQUET_MCG_GAP),
+                    "other_label_top": round(bloom_bottom + _BOUQUET_MCG_GAP),
+                }
+            )
+        rows.append({"label": label, "count": count, "row_top": row_top, "row_center": row_center, "options": options})
+    return {
+        "kind": "multiple_choice_grouped",
+        "count": total_count,
+        "rows": rows,
+        "track_left": _BOUQUET_GROUPED_TRACK_LEFT,
+        "track_width": _BOUQUET_GROUPED_TRACK_WIDTH,
+        "label_left": _BOUQUET_GROUPED_LABEL_LEFT,
+        "label_width": _BOUQUET_GROUPED_LABEL_WIDTH,
+        "name_font_size": name_font,
+        "count_font_size": count_font,
+        "winner_font_size": winner_font,
+        "other_font_size": other_font,
+    }
+
+
+def _bouquet_geometry_number_grouped(breakdown: dict) -> dict:
+    """Ribbon Rows' number generalization -- see docs/screen-styles.md's Generalization
+    mockup. Each row repeats the single-group diagram's own "one flower, one honest number"
+    idea (_bouquet_geometry_number) rather than inventing any shared scale/axis across
+    groups -- NUMBER questions still have no declared min/max (see that function's
+    docstring), and that's just as true per-group as it is overall, so there's still nothing
+    real to plot a bar or gauge against. The `aggregation` label is the same for every row
+    (one BigScreenState.aggregation setting applies to the whole reveal), so it's computed
+    once and returned at the top level rather than repeated per row."""
+    items = list(breakdown.items())
+    n = len(items)
+    row_height = (_BOUQUET_GROUPED_ROWS_BOTTOM - _BOUQUET_GROUPED_ROWS_TOP) / n
+    name_font, count_font = _bouquet_grouped_label_font_sizes(row_height)
+    flower_size = round(min(92, max(40, row_height * 0.5)))
+    value_font_size = round(min(92, max(38, row_height * 0.46)))
+    tag_font_size = round(min(20, max(13, row_height * 0.09)))
+
+    rows = []
+    total_count = 0
+    aggregation = None
+    for i, (label, group) in enumerate(items):
+        count = group["count"]
+        total_count += count
+        aggregation = group["aggregation"]
+        row_top = round(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
+        row_center = round(row_top + row_height / 2)
+        rows.append(
+            {
+                "label": label,
+                "count": count,
+                "value": group["value"],
+                "row_top": row_top,
+                "row_center": row_center,
+            }
+        )
+    aggregation = aggregation or BigScreenState.Aggregation.AVG
+    return {
+        "kind": "number_grouped",
+        "count": total_count,
+        "rows": rows,
+        "label_left": _BOUQUET_GROUPED_LABEL_LEFT,
+        "label_width": _BOUQUET_GROUPED_LABEL_WIDTH,
+        "flower_left": _BOUQUET_GROUPED_TRACK_LEFT,
+        # Fixed offsets past the flower/value, generous enough for this style's biggest
+        # possible flower (see flower_size's own clamp above) and a 3-digit-plus-decimal
+        # value at this style's biggest possible value_font_size, so they never collide
+        # regardless of which group count/aggregation actually rendered.
+        "value_left": _BOUQUET_GROUPED_TRACK_LEFT + 130,
+        "tag_left": _BOUQUET_GROUPED_TRACK_LEFT + 130 + 320,
+        "name_font_size": name_font,
+        "count_font_size": count_font,
+        "flower_size": flower_size,
+        "value_font_size": value_font_size,
+        "tag_font_size": tag_font_size,
+        "aggregation_label": dict(BigScreenState.Aggregation.choices)[aggregation],
     }
 
 
@@ -305,10 +716,39 @@ def screen_state(request):
                     podium_count = next(iter(breakdown.values()))["count"]
                     podium_question_font_size = _podium_question_font_size(state.question.text_sv)
             elif state.style == BigScreenState.Style.BOUQUET:
-                group = next(iter(breakdown.values()))
-                if group["yes_pct"] is not None:  # same "nobody's answered yet" guard
-                    bouquet = _bouquet_geometry(group["yes_pct"], group["count"])
-                    effective_style = state.style
+                if state.breakdown == BigScreenState.Breakdown.OVERALL:
+                    group = next(iter(breakdown.values()))
+                    # Three diagram types, one per Question.Type -- see
+                    # _bouquet_geometry_boolean/_multiple_choice/_number's docstrings for why
+                    # each looks the way it does. Each branch's own "nobody's answered yet"
+                    # guard mirrors Podium's `if ranked:` above so an empty reveal falls back
+                    # to GENERIC's "Inga svar än." instead of rendering a broken/empty
+                    # botanical diagram.
+                    if state.question.type == Question.Type.BOOLEAN and group["yes_pct"] is not None:
+                        bouquet = _bouquet_geometry_boolean(group["yes_pct"], group["count"])
+                        effective_style = state.style
+                    elif state.question.type == Question.Type.MULTIPLE_CHOICE and group["options_pct"]:
+                        bouquet = _bouquet_geometry_multiple_choice(group["options_pct"], group["count"])
+                        effective_style = state.style
+                    elif state.question.type == Question.Type.NUMBER and group["value"] is not None:
+                        bouquet = _bouquet_geometry_number(group["value"], group["aggregation"], group["count"])
+                        effective_style = state.style
+                elif breakdown:  # nobody's answered yet -> fall back to GENERIC, same spirit as above
+                    # Their grouped ("Ribbon Rows") siblings -- one row per group instead of
+                    # one shared diagram -- see _bouquet_geometry_*_grouped's docstrings.
+                    # compute_breakdown() only ever includes a group that has at least one
+                    # response (aggregations._group), so every group here has count > 0; the
+                    # `elif breakdown:` guard above is only about the whole dict being empty
+                    # (literally nobody has answered this question yet).
+                    if state.question.type == Question.Type.BOOLEAN:
+                        bouquet = _bouquet_geometry_boolean_grouped(breakdown)
+                        effective_style = state.style
+                    elif state.question.type == Question.Type.MULTIPLE_CHOICE:
+                        bouquet = _bouquet_geometry_multiple_choice_grouped(breakdown)
+                        effective_style = state.style
+                    elif state.question.type == Question.Type.NUMBER:
+                        bouquet = _bouquet_geometry_number_grouped(breakdown)
+                        effective_style = state.style
             else:
                 effective_style = state.style
 

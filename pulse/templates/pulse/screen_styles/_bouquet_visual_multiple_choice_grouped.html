@@ -1,0 +1,49 @@
+{% comment %}
+Bouquet's multiple_choice_grouped diagram type ("Ribbon Rows"): one horizontal stem per
+group, every option's blossom strung along it left-to-right by rank (highest pct first --
+NOT centre-out like the single-group fan, _bouquet_visual_multiple_choice.html) -- geometry
+computed by views._bouquet_geometry_multiple_choice_grouped. Bloom size and fill-opacity
+both scale with the real pct, normalized against the single highest pct anywhere in the
+whole breakdown (see that function's docstring for the exact formula).
+
+Only the top-scoring bloom(s) in each row (a genuine tie shows more than one) get their
+"Label pct%" line above the stem, in the larger of the two sizes; everyone else gets the
+same "Label pct%" shape below the stem, smaller -- the same "only the winner gets the
+prominent label" trade-off the RibbonRows mockup made, so a 5-option x 5-group grid still
+fits on one screen without every one of 25 labels competing for space.
+
+Every coordinate is page-absolute within the 1920x1080 stage (same convention as the other
+grouped/_multiple_choice partials), so `.mcg-visual` sits at inset:0.
+{% endcomment %}
+<div class="mcg-visual">
+  {% for row in bouquet.rows %}
+    <div class="mcg-label" style="top:{{ row.row_center }}px; left:{{ bouquet.label_left }}px; width:{{ bouquet.label_width }}px">
+      <span class="mcg-gname" style="font-size:{{ bouquet.name_font_size }}px">{{ row.label }}</span>
+      <span class="mcg-gcount" style="font-size:{{ bouquet.count_font_size }}px">{{ row.count }} svar</span>
+    </div>
+
+    <div class="mcg-stem" style="top:{{ row.row_center }}px; left:{{ bouquet.track_left }}px; width:{{ bouquet.track_width }}px"></div>
+
+    {% for opt in row.options %}
+      {% comment %}
+      opacity (a compositing property applied to the whole rendered <use> as a group), not
+      fill-opacity -- #bq-blossom's own petals already set their own explicit fill-opacity
+      internally, which as a specified value on that descendant would just win over (i.e.
+      ignore) any fill-opacity we tried to set here on an ancestor. opacity has no such
+      escape hatch: it always dims the whole cloned glyph, which is what pct-scaled fading
+      needs. See _bouquet_decor.html's comment for why #bq-blossom is reused via <use>
+      rather than redefined with a variable opacity baked in.
+      {% endcomment %}
+      <svg class="mcg-bloom" width="{{ opt.bloom_size }}" height="{{ opt.bloom_size }}" viewBox="-24 -24 48 48"
+           style="left:{{ opt.x }}px; top:{{ row.row_center }}px; opacity:{{ opt.bloom_opacity }}">
+        <use href="#bq-blossom"></use>
+      </svg>
+
+      {% if opt.is_winner %}
+        <div class="mcg-winner-label" style="left:{{ opt.x }}px; top:{{ opt.winner_label_top }}px; font-size:{{ bouquet.winner_font_size }}px">{{ opt.label }} {{ opt.pct }}%</div>
+      {% else %}
+        <div class="mcg-other-label" style="left:{{ opt.x }}px; top:{{ opt.other_label_top }}px; font-size:{{ bouquet.other_font_size }}px">{{ opt.label }} {{ opt.pct }}%</div>
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+</div>

@@ -209,9 +209,15 @@ class BigScreenState(models.Model):
         #              multiple-choice question's options (breakdown=OVERALL: a per-group
         #              breakdown would be several separate option distributions, not one
         #              ranked list).
-        #   BOUQUET -- a single ja/nej split rendered as one two-ended vine. Only a real fit
-        #              for a boolean question at breakdown=OVERALL (a per-group breakdown
-        #              would be several splits -- a different design, not a resize of this one).
+        #   BOUQUET -- one botanical diagram per Question.Type: a boolean split as a
+        #              two-ended vine, multiple-choice options as a fanned arrangement (one
+        #              stem per option, height = real pct), a number question's aggregated
+        #              value as a single centerpiece stem (see views._bouquet_geometry_*).
+        #              That trio is breakdown=OVERALL only; every other breakdown gets a
+        #              "Ribbon Rows" sibling of each -- one horizontal row per group, added
+        #              2026-09-06 (see docs/screen-styles.md's session summary of that date)
+        #              -- so BOUQUET is now as breakdown-permissive as GENERIC
+        #              (views._bouquet_geometry_*_grouped).
         GENERIC = "generic", "Standard"
         PODIUM = "podium", "Podium"
         BOUQUET = "bouquet", "Bukett"

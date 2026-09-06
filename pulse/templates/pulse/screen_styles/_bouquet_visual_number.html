@@ -1,0 +1,35 @@
+{% comment %}
+Bouquet's number diagram type: a single centerpiece stem topped with the shared
+#bq-blossom glyph, presenting the one aggregated value -- geometry from
+views._bouquet_geometry_number. Deliberately not a gauge: NUMBER questions have no
+declared min/max in the schema (age, cinnamon buns, coffee cups/day, ... are all
+type=number with wildly different ranges), so there is no real stem-height-by-magnitude or
+axis to draw here -- see that function's docstring. This is "one beautiful flower
+presenting one real number," matching GENERIC's own plain .result-number semantics
+(pulse/templates/pulse/_screen_state.html), just dressed in Bouquet's botanical voice.
+
+Fixed layout (unlike multiple_choice, there's only ever one of these per reveal, so it's
+centered on the stage rather than positioned per-item from Python) -- see
+.style-bouquet .number-visual etc. in screen_styles.css for the actual pixel placement.
+Every child below is placed as a page-absolute stage pixel (same convention as the
+multiple_choice partial), stacked top-to-bottom in the gap between the header divider
+(ends ~376px) and the footer rule (starts ~872px): stem+bloom, then the value, then the
+aggregation tag, each with enough clearance to not touch the next.
+{% endcomment %}
+<div class="number-visual">
+
+  <svg class="number-stem" viewBox="0 0 48 190" width="48" height="190">
+    <path d="M24,190 C 10,155 38,120 24,90 C 12,62 34,30 24,0"
+          fill="none" stroke="#7c8c70" stroke-width="3" stroke-linecap="round"></path>
+    <use href="#leaf" transform="translate(30,128) rotate(48) scale(0.85)"></use>
+    <use href="#leaf-r" transform="translate(16,76) rotate(-46) scale(0.85)"></use>
+  </svg>
+
+  <svg class="number-bloom" width="150" height="150" viewBox="-24 -24 48 48">
+    <use href="#bq-blossom"></use>
+  </svg>
+
+  <div class="number-value">{{ bouquet.value|floatformat:1 }}</div>
+  <div class="number-tag">{{ bouquet.aggregation_label }}</div>
+
+</div>

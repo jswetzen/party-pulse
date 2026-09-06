@@ -1,0 +1,38 @@
+{% comment %}
+Bouquet's original diagram type: one ja/nej split rendered as a single two-ended vine, its
+geometry computed by views._bouquet_geometry_boolean from the real yes_pct. Split out of
+_bouquet.html unchanged when Bouquet grew multiple_choice/number siblings (see
+_bouquet_decor.html's comment) -- only the .marker flower below changed, from an inlined
+copy of these exact paths to <use href="#bq-blossom"> against the symbol that partial now
+defines, so all three diagram types' data-bearing flowers are visibly the same glyph.
+{% endcomment %}
+<div class="visual">
+  <div class="num nej" style="left:{{ bouquet.nej_center }}px">{{ bouquet.nej_pct }}%</div>
+  <div class="num ja" style="left:{{ bouquet.ja_center }}px">{{ bouquet.yes_pct }}%</div>
+  <div class="num-label nej" style="left:{{ bouquet.nej_center }}px">Nej</div>
+  <div class="num-label ja" style="left:{{ bouquet.ja_center }}px">Ja</div>
+
+  <div class="guideline"></div>
+  <div class="guideline-tag">mitten</div>
+
+  <div class="track-wrap">
+    <div class="track-seg nej" style="width:{{ bouquet.nej_seg_width }}px"></div>
+    <div class="track-seg ja" style="left:{{ bouquet.ja_seg_left }}px; width:{{ bouquet.ja_seg_width }}px"></div>
+    <div class="track-seam" style="left:{{ bouquet.seam_left }}px; width:{{ bouquet.seam_width }}px"></div>
+    <div class="track-outline"></div>
+  </div>
+
+  {% if bouquet.is_near_tie %}
+    <svg class="tendril" viewBox="0 0 220 110">
+      <path d="M47,8 C 90,30 140,58 190,86" fill="none" stroke="#a9803f" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="1 5" stroke-linecap="round"></path>
+    </svg>
+  {% endif %}
+
+  <svg class="marker" width="64" height="64" viewBox="-24 -24 48 48" style="left:{{ bouquet.marker_left }}px">
+    <use href="#bq-blossom"></use>
+  </svg>
+
+  {% if bouquet.is_near_tie %}
+    <div class="note">nästan mitt itu</div>
+  {% endif %}
+</div>
