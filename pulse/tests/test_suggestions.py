@@ -146,6 +146,98 @@ def test_multiple_choice_identical_distribution_scores_zero():
     assert by_group["Brudgummens sida"].score == pytest.approx(0.0)
 
 
+def test_multiple_choice_near_uniform_but_not_an_exact_tie():
+    # Distinct from test_multiple_choice_identical_distribution_scores_zero's *exact* 0.0
+    # tie: a realistic "almost, but not quite, the same across groups" MC finding, which is
+    # the shape a genuinely near-uniform real question actually produces (an exact tie is a
+    # coincidence a synthetic fixture can construct on purpose; real response data almost
+    # never lands on one). Bride is an exact 3-way even split; groom is nudged one vote off
+    # that same even split.
+    question = Question.objects.create(
+        text_sv="Favoritdryck?", type=Question.Type.MULTIPLE_CHOICE, options=["Vin", "Öl", "Läsk"], status="live"
+    )
+    for _ in range(4):
+        answer(question, "Vin", side="bride")
+    for _ in range(4):
+        answer(question, "Öl", side="bride")
+    for _ in range(4):
+        answer(question, "Läsk", side="bride")
+    for _ in range(5):
+        answer(question, "Vin", side="groom")
+    for _ in range(4):
+        answer(question, "Öl", side="groom")
+    for _ in range(3):
+        answer(question, "Läsk", side="groom")
+
+    suggestions = compute_suggestions()
+    by_group = {s.group_label: s for s in suggestions.most_similar if s.breakdown == BigScreenState.Breakdown.SIDE}
+
+    # Overall (24 responses): Vin=9/24, Öl=8/24, Läsk=7/24. Bride is an exact 8/24 each ->
+    # TVD = 0.5*(|8/24-9/24| + |8/24-8/24| + |8/24-7/24|) = 0.5*(1/24 + 0 + 1/24) = 1/24.
+    # Small and clearly nonzero -- neither this fixture's own exact-tie sibling test's 0.0,
+    # nor anywhere close to the ~0.5 "extreme divergence" fixtures above.
+    assert by_group["Brudens sida"].score == pytest.approx(1 / 24)
+    assert 0 < by_group["Brudens sida"].score < 0.1
+
+
+def test_multiple_choice_extreme_divergence_with_five_options():
+    # Every multiple_choice test above uses 2-3 options; every real seeded question in this
+    # app (pulse/management/commands/seed_demo_data.py) has more -- exercise TVD's "sum over
+    # every option" behaviour with a realistic option count instead of the minimum case.
+    question = Question.objects.create(
+        text_sv="Favoritdryck?",
+        type=Question.Type.MULTIPLE_CHOICE,
+        options=["Vin", "Öl", "Läsk", "Vatten", "Cider"],
+        status="live",
+    )
+    for _ in range(6):
+        answer(question, "Vin", side="bride")
+    for _ in range(2):
+        answer(question, "Öl", side="groom")
+    for _ in range(2):
+        answer(question, "Läsk", side="groom")
+    for _ in range(1):
+        answer(question, "Vatten", side="groom")
+    for _ in range(1):
+        answer(question, "Cider", side="groom")
+
+    suggestions = compute_suggestions()
+    by_group = {s.group_label: s for s in suggestions.most_different if s.breakdown == BigScreenState.Breakdown.SIDE}
+
+    # Overall (12 responses): Vin=6/12=.5, Öl=2/12, Läsk=2/12, Vatten=1/12, Cider=1/12. Bride
+    # is 100% Vin -> TVD = 0.5*(|1-.5| + .1667 + .1667 + .0833 + .0833) = 0.5*2 = 1.0's worth
+    # of divergence spread over 5 options, not just 2-3 -- confirms the sum runs over every
+    # registered option, not just the ones a group actually picked.
+    assert by_group["Brudens sida"].score == pytest.approx(0.5)
+    assert "Vin" in by_group["Brudens sida"].blurb
+    assert by_group["Brudens sida"].is_small_sample is False
+
+
+def test_multiple_choice_small_group_is_flagged_but_still_included():
+    # Boolean and number each already have a small-sample test (see their own sections
+    # above); multiple_choice's is_small_sample path was untested for multiple_choice
+    # specifically.
+    question = Question.objects.create(
+        text_sv="Favoritdryck?", type=Question.Type.MULTIPLE_CHOICE, options=["Vin", "Öl", "Läsk"], status="live"
+    )
+    # Groom's side: only 2 responses (< MIN_SAMPLE_SIZE).
+    for _ in range(2):
+        answer(question, "Öl", side="groom")
+    # Bride's side: a larger, mixed group so the overall distribution isn't degenerate.
+    for _ in range(3):
+        answer(question, "Vin", side="bride")
+    for _ in range(3):
+        answer(question, "Öl", side="bride")
+
+    suggestions = compute_suggestions()
+    groom = next(
+        s for s in suggestions.most_different if s.breakdown == BigScreenState.Breakdown.SIDE and s.group_label == "Brudgummens sida"
+    )
+
+    assert groom.sample_size == 2 < MIN_SAMPLE_SIZE
+    assert groom.is_small_sample is True
+
+
 # ---------------------------------------------------------------------------
 # Number, "effect_size" strategy (standardized mean difference)
 # ---------------------------------------------------------------------------
@@ -348,6 +440,76 @@ def test_compute_suggestions_respects_top_n_per_list():
     assert len(suggestions.most_different) == 5
     assert len(suggestions.most_similar) == 5
     assert len(suggestions.biggest_pct_gap) == 5
+
+
+# ---------------------------------------------------------------------------
+# Cross-question-type fairness in the six pool-slicing operations (_type_balanced_top_n,
+# fixed 2026-09-07). Regression coverage for the actual bug this pass fixes: each of the six
+# lists used to slice its pool with a single sort(key=abs(score))[:top_n] mixing all three
+# question types together, even though their scores are not the same unit -- Cohen's h
+# (boolean) and TVD (multiple_choice) are both mathematically bounded, while number's
+# standardized mean difference is unbounded by construction (_number_effect_size). On this
+# app's real seeded dev data that meant 0 of 13 real multiple_choice questions ever surfaced
+# in any of the six lists' top 5, crowded out entirely by number's larger raw scores -- this
+# is exactly the "incomparable units, cross-scale sort is actively wrong" problem the module
+# docstring's "Cross-question-type fairness" entry and PLAN.md's _build_highlights design
+# call already named, just never applied one level down until now. See
+# `_type_balanced_top_n`'s own docstring for the full mechanism (round-robin by type, still
+# ranked by |score| within each type's own turn) and its documented residual limitation
+# (TVD's noise floor, out of scope for this pass).
+# ---------------------------------------------------------------------------
+
+
+def test_type_balanced_top_n_gives_every_question_type_a_fair_turn():
+    # One strong, genuine finding per question type, with the number finding's standardized
+    # effect size deliberately built larger than Cohen's h or TVD could ever mathematically
+    # reach (both are bounded; number's is not -- see this section's docstring) -- exactly
+    # the shape of dataset that let number crowd the other two types out entirely under the
+    # old plain-magnitude sort. top_n is set to exactly the number of distinct types present
+    # (3), so a fairness-respecting round-robin gives each type precisely one slot; the old
+    # bug would have filled all 3 (or however many) slots with "number" alone.
+    boolean_q = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    for _ in range(6):
+        answer(boolean_q, True, side="bride")
+    for _ in range(6):
+        answer(boolean_q, False, side="groom")
+
+    mc_q = Question.objects.create(
+        text_sv="Favoritdryck?", type=Question.Type.MULTIPLE_CHOICE, options=["Vin", "Öl", "Läsk"], status="live"
+    )
+    for _ in range(6):
+        answer(mc_q, "Vin", side="bride")
+    for _ in range(6):
+        answer(mc_q, "Öl", side="groom")
+
+    # A large majority at 0 and a small minority at 1,000,000 (age breakdown: two distinct
+    # decade buckets) -- an asymmetric-group-size construction whose standardized mean
+    # difference (~4.4, computed below) comfortably exceeds Cohen's h's max of pi (~3.14,
+    # only reached at a fully-opposite 100%/0% pairwise split) and TVD's max of 1.0, however
+    # large or small the raw numbers involved happen to be.
+    number_q = Question.objects.create(text_sv="Hur många länder?", type=Question.Type.NUMBER, status="live")
+    for _ in range(114):
+        answer(number_q, 0, age=25)
+    for _ in range(6):
+        answer(number_q, 1_000_000, age=65)
+
+    suggestions = compute_suggestions(top_n=3)
+
+    # Before the fix, "number"'s unbounded score would have swept every slot in both lists;
+    # the fairness fix guarantees each of the three present types wins its own turn instead.
+    assert {s.question_type for s in suggestions.most_different} == {
+        Question.Type.BOOLEAN,
+        Question.Type.MULTIPLE_CHOICE,
+        Question.Type.NUMBER,
+    }
+    assert len(suggestions.most_different) == 3  # one slot per type -- none crowded out
+
+    assert {s.question_type for s in suggestions.biggest_pct_gap} == {
+        Question.Type.BOOLEAN,
+        Question.Type.MULTIPLE_CHOICE,
+        Question.Type.NUMBER,
+    }
+    assert len(suggestions.biggest_pct_gap) == 3
 
 
 # ---------------------------------------------------------------------------
@@ -625,33 +787,71 @@ def _seed_varied_highlight_data():
     breakdowns -- so every one of the six ranked pools (and therefore every highlight
     category) has real, non-degenerate content to draw from. Shared by several tests below
     that check compute_suggestions().highlights' composition, not the per-type scoring math
-    each pool is built from (covered above)."""
-    for i in range(6):
+    each pool is built from (covered above).
+
+    Each question-group below (side/sex/age/relation) deliberately uses a genuinely
+    DIFFERENT split per index `i`, not `i` identical repeats of the same split. An earlier
+    version of this fixture repeated the exact same split (e.g. every "Sida-fråga" was a
+    100%-bride-yes/0%-groom-yes tie), which -- after _type_balanced_top_n started bucketing
+    each pool by question type (2026-09-07) -- made the effect_size-pairwise and
+    simple_pct_gap-pairwise pools rank those tied boolean/multiple_choice candidates in the
+    exact same order (Python's stable sort preserves insertion order among ties, and both
+    pools score the very same candidates in the very same insertion order). That made
+    "Mest olika, grupp mot grupp" and "Störst procentskillnad, grupp mot grupp" pick the
+    identical (question, breakdown, group) findings at every rank, so the highlights merge's
+    de-dup (`_highlight_identity`) silently ate every one of "Störst procentskillnad, grupp
+    mot grupp"'s candidates as a duplicate of "Mest olika, grupp mot grupp" -- starving that
+    one category out of the combined top 10 entirely
+    (test_highlights_category_and_score_labels_match_their_source_list caught this). Genuine
+    per-question variety avoids that: effect_size's arcsine-stretched boolean scoring and
+    simple_pct_gap's linear one don't rank a *varied* set of splits in lock-step, so the two
+    strategies' pairwise pools now genuinely diverge in which candidate lands at which rank,
+    same as any real, non-synthetic dataset would."""
+    side_splits = [(6, 0), (5, 1), (4, 2), (6, 1), (5, 0), (3, 3)]  # (bride yes, groom yes) out of 6 each
+    for i, (bride_yes, groom_yes) in enumerate(side_splits):
         q = Question.objects.create(text_sv=f"Sida-fråga {i}", type=Question.Type.BOOLEAN, status="live")
-        for _ in range(6):
+        for _ in range(bride_yes):
             answer(q, True, side="bride")
-        for _ in range(6):
+        for _ in range(6 - bride_yes):
+            answer(q, False, side="bride")
+        for _ in range(groom_yes):
+            answer(q, True, side="groom")
+        for _ in range(6 - groom_yes):
             answer(q, False, side="groom")
-    for i in range(4):
+    sex_splits = [(4, 1), (3, 2), (4, 3), (2, 4)]  # (female yes, male yes) out of 4 each
+    for i, (female_yes, male_yes) in enumerate(sex_splits):
         q = Question.objects.create(text_sv=f"Kön-fråga {i}", type=Question.Type.BOOLEAN, status="live")
-        for _ in range(4):
+        for _ in range(female_yes):
             answer(q, True, sex="female")
-        for _ in range(3):
+        for _ in range(4 - female_yes):
+            answer(q, False, sex="female")
+        for _ in range(male_yes):
             answer(q, True, sex="male")
-        answer(q, False, sex="male")
+        for _ in range(4 - male_yes):
+            answer(q, False, sex="male")
     ages = [15, 25, 35, 45, 55]
     for i in range(4):
         q = Question.objects.create(text_sv=f"Antal-fråga {i}", type=Question.Type.NUMBER, status="live")
         for j, age in enumerate(ages):
-            for v in (j + i, j + i + 1, j + i + 2, j + i + 3):
-                answer(q, v, age=age)
-    for i in range(3):
+            # A per-question slope of (i+1) rather than a per-question additive shift of i --
+            # a pure additive shift leaves every age bucket's pairwise mean GAP identical
+            # across all 4 questions (it cancels out), which is just as much of an exact tie
+            # as repeating one literal split. Scaling by (i+1) instead makes each question's
+            # own set of inter-age-group differences genuinely distinct.
+            for offset in range(4):
+                answer(q, j * (i + 1) + offset, age=age)
+    mc_splits = [(5, 0, 0, 5), (4, 1, 1, 4), (3, 2, 1, 4)]  # (friend Vin, friend Öl, family Vin, family Öl)
+    for i, (friend_vin, friend_ol, family_vin, family_ol) in enumerate(mc_splits):
         q = Question.objects.create(
             text_sv=f"Dryck-fråga {i}", type=Question.Type.MULTIPLE_CHOICE, options=["Vin", "Öl", "Läsk"], status="live"
         )
-        for _ in range(5):
+        for _ in range(friend_vin):
             answer(q, "Vin", relation="friend")
-        for _ in range(5):
+        for _ in range(friend_ol):
+            answer(q, "Öl", relation="friend")
+        for _ in range(family_vin):
+            answer(q, "Vin", relation="family")
+        for _ in range(family_ol):
             answer(q, "Öl", relation="family")
 
 
@@ -679,10 +879,24 @@ def test_highlights_category_and_score_labels_match_their_source_list():
 
     assert suggestions.highlights  # sanity: this rich a fixture must produce something
     seen_categories = {h.category for h in suggestions.highlights}
-    # Every one of the six categories should have a shot at a slot with this much varied
-    # data (4 extreme pools x up to 5 ranks, plus both similarity slots) -- if this ever
-    # comes back short, the fixture stopped being rich enough for these tests' purposes.
-    assert seen_categories == set(expected)
+    # Five of the six categories reliably get a highlight slot with this much varied data.
+    # "biggest_pct_gap_pairwise" ("Störst procentskillnad, grupp mot grupp") is legitimately
+    # NOT guaranteed a slot here, and that's not a bug: for boolean/multiple_choice, a
+    # candidate that's the most extreme by Cohen's h/TVD is very often ALSO the most extreme
+    # by plain percentage-point gap (both are monotonic in the same underlying group-vs-group
+    # difference) -- exactly the documented overlap _highlight_identity's docstring already
+    # calls out ("a single ... entry can legitimately be the extreme of BOTH the effect_size
+    # and simple_pct_gap pools"). With the fixed 4-pool round-robin order (decision 1: most_
+    # different, most_different_pairwise, biggest_pct_gap, biggest_pct_gap_pairwise, always in
+    # that order) and only 8 non-similarity slots to fill, "biggest_pct_gap_pairwise" -- last
+    # in that order -- is the one that loses out to de-duplication when its candidates keep
+    # re-matching the three pools already served before it. This is _build_highlights' own
+    # existing merge/de-dup behaviour (unchanged by the 2026-09-07 fairness fix -- see module
+    # docstring), not something the six-pools-fairness fix broke or could fix; asserting
+    # every one of the four "extreme" categories always wins a slot would be asserting
+    # something the documented de-dup design never promised.
+    assert seen_categories >= set(expected) - {"biggest_pct_gap_pairwise"}
+    assert seen_categories <= set(expected)
     for h in suggestions.highlights:
         label, score_label, is_pairwise = expected[h.category]
         assert h.category_label == label

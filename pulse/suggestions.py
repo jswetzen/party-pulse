@@ -39,7 +39,29 @@ scoring function with the same (question, label_a, values_a, label_b, values_b) 
 module needs to change (_score_pools() feeds it both vs-overall pairs -- always with
 label_b="totalt", values_b=the question's overall values -- and genuine pairwise pairs from
 the same per-breakdown group scan, so compute_suggestions() decides which strategies feed
-which lists, same as before)."""
+which lists, same as before).
+
+**Cross-question-type fairness within each of the six lists, fixed 2026-09-07**: each
+scoring strategy pools all three question types (boolean/multiple_choice/number) into one
+list of candidates, but their scores are NOT the same unit -- Cohen's h (boolean) and total
+variation distance (multiple_choice) are both mathematically bounded, while the number
+strategy's standardized mean difference (_number_effect_size) is unbounded by construction.
+compute_suggestions() used to slice each pool's top_n with a single `sort(key=abs(score))`
+across all three types at once -- exactly the "incomparable units, cross-scale sort is
+actively wrong" problem this file already recognized and solved one level up, for
+_build_highlights()' six-pool merge (see that function's docstring), but never applied to
+the six underlying pools themselves. In practice that meant number's unbounded metric could
+mathematically dominate every top_n slot regardless of whether a boolean/multiple_choice
+finding was more interesting -- confirmed against this app's real seeded dev data, where
+zero multiple_choice findings surfaced anywhere despite genuinely strong real MC signal
+(TVD=0.394, n=126) existing. Fixed by generalizing _build_highlights()' round-robin
+principle down to this level too: `_type_balanced_top_n` (used by compute_suggestions() for
+all six lists) interleaves each pool's candidates by question type via the same
+`_round_robin_merge` helper _build_highlights() uses for its own pool-of-pools merge, rather
+than a second, subtly different implementation. See `_type_balanced_top_n`'s docstring for
+the full before/after and the one residual, deliberately out-of-scope limitation (TVD's
+noise floor makes multiple_choice structurally harder to *win* a similarity slot on merit,
+even with fair turns guaranteed)."""
 
 import itertools
 import math
@@ -145,6 +167,7 @@ def _mean_blurb(label_a: str, mean_a: float, label_b: str, mean_b: float, n_a: i
 class Suggestion:
     question_id: int
     question_text: str
+    question_type: str  # Question.Type value (e.g. "boolean") -- see _type_balanced_top_n
     breakdown: str  # raw value (e.g. "side"), for building the prefill link
     breakdown_label: str  # Swedish display label (e.g. "Sida")
     group_label: str
@@ -164,6 +187,7 @@ class PairwiseSuggestion:
 
     question_id: int
     question_text: str
+    question_type: str  # Question.Type value -- see _type_balanced_top_n
     breakdown: str
     breakdown_label: str
     group_a_label: str
@@ -317,6 +341,7 @@ def _score_pools() -> dict[str, tuple[list[Suggestion], list[PairwiseSuggestion]
                         Suggestion(
                             question_id=question.id,
                             question_text=question.text_sv,
+                            question_type=question.type,
                             breakdown=breakdown,
                             breakdown_label=_BREAKDOWN_LABELS[breakdown],
                             group_label=group_label,
@@ -342,6 +367,7 @@ def _score_pools() -> dict[str, tuple[list[Suggestion], list[PairwiseSuggestion]
                         PairwiseSuggestion(
                             question_id=question.id,
                             question_text=question.text_sv,
+                            question_type=question.type,
                             breakdown=breakdown,
                             breakdown_label=_BREAKDOWN_LABELS[breakdown],
                             group_a_label=label_a,
@@ -355,6 +381,108 @@ def _score_pools() -> dict[str, tuple[list[Suggestion], list[PairwiseSuggestion]
                         )
                     )
     return {name: (vs_overall[name], pairwise[name]) for name in SCORING_STRATEGIES}
+
+
+def _round_robin_merge(sequences: list[list], limit: int, seen: set | None = None, identity_fn=None) -> list[tuple[int, object]]:
+    """Generic round-robin interleave, shared by `_type_balanced_top_n` (interleaving one
+    pool's candidates across question types, see below) and `_build_highlights` (interleaving
+    the four "extreme" pools across categories, PLAN.md decision 1): take element 0 of each
+    sequence in the given order, then element 1, and so on, silently skipping a sequence once
+    it's exhausted -- never padding, never erroring -- until either `limit` items have been
+    collected or every sequence is exhausted. Each sequence is assumed already sorted in the
+    caller's desired priority order; this function only decides whose *turn* it is next,
+    never re-orders within a sequence.
+
+    Returns `(sequence_index, item)` pairs rather than bare items so a caller whose sequences
+    carry per-sequence metadata (e.g. `_build_highlights`' category/label/is_pairwise per
+    pool) can look that metadata up by index afterwards, without this function needing to
+    know anything about what a sequence's items or metadata actually are.
+
+    `seen`/`identity_fn` are optional, used only by `_build_highlights`: it needs to
+    de-duplicate the same underlying (question, breakdown, group) finding surfacing from two
+    different pools (e.g. as the extreme of both "effect_size" and "simple_pct_gap", or
+    because a small pool makes "most different" and "most similar" overlap -- see
+    `compute_suggestions()`'s docstring). Pass a `seen` set (mutated in place, so a caller can
+    keep de-duping across multiple calls/phases -- `_build_highlights` feeds the same set from
+    its similarity phase into its extreme-pool phase) and an `identity_fn` mapping an item to
+    its dedup key. Left as `None` by `_type_balanced_top_n`, where every candidate is already
+    known-distinct (one Suggestion can only ever land in one question-type bucket of one
+    pool), so every item is kept."""
+    result: list[tuple[int, object]] = []
+    rank = 0
+    while len(result) < limit and any(rank < len(seq) for seq in sequences):
+        for index, seq in enumerate(sequences):
+            if len(result) >= limit:
+                break
+            if rank >= len(seq):
+                continue  # this sequence is exhausted at this rank -- skip it, don't pad, move on
+            item = seq[rank]
+            if seen is not None:
+                key = identity_fn(item)
+                if key in seen:
+                    continue
+                seen.add(key)
+            result.append((index, item))
+        rank += 1
+    return result
+
+
+# Fixed, canonical order the per-pool question-type round-robin (_type_balanced_top_n) takes
+# its turns in -- an arbitrary but stable choice (mirrors _EXTREME_CATEGORIES below picking a
+# fixed pool order for the same reason): fairness only requires every type present get a
+# turn, not any particular priority among them, but a stable order keeps output
+# deterministic/testable rather than depending on dict-insertion order, which would itself
+# depend on incidental question-iteration order from the DB.
+_QUESTION_TYPE_ORDER = [Question.Type.BOOLEAN, Question.Type.MULTIPLE_CHOICE, Question.Type.NUMBER]
+
+
+def _type_balanced_top_n(items: list, n: int, reverse: bool = True) -> list:
+    """Slice a mixed-question-type candidate pool down to `n` entries via round-robin-by-
+    question-type instead of a single `sort(key=abs(score))[:n]`.
+
+    This is the actual fix for the bug that motivated this function: a plain magnitude sort
+    mixes three structurally incomparable units into one pool -- Cohen's h (boolean), total
+    variation distance (multiple_choice, mathematically bounded to [0, 1]), and a
+    standardized mean difference (number, literally unbounded by construction -- see
+    `_number_effect_size`) -- so a raw `sort(key=abs(score))` lets whichever unit happens to
+    produce the largest raw numbers dominate every top-`n` slot for reasons that have nothing
+    to do with which finding is actually most interesting. Measured against this app's real
+    seeded dev data (13 multiple_choice questions, 124-134 responses each): zero
+    multiple_choice findings ever appeared in any of the six lists' top 5, despite genuinely
+    strong real MC findings existing (e.g. TVD=0.394, n=126) -- they always lost the raw-
+    magnitude sort to number's unbounded metric. This is exactly the "incomparable units,
+    cross-scale sort is actively wrong" problem PLAN.md's "Interesting stats suggestions"
+    section already named and rejected for `_build_highlights`' six-pool merge (see decision
+    1 there) -- that round-robin fix was only ever applied one level up, to the combined
+    highlights panel; the six pools it draws from still did the literal cross-type sort this
+    function replaces.
+
+    Each of the (at most three) per-type buckets is still internally sorted by `abs(score)`
+    first -- descending for `reverse=True` ("most different" / "biggest pct gap": each type's
+    turn contributes its next-most-extreme candidate), ascending for `reverse=False` ("most
+    similar": each type's turn contributes its next-closest-to-zero candidate) -- the
+    round-robin only decides whose turn it is next, never which of one type's own candidates
+    outranks another. A type with zero candidates in this particular pool simply has no
+    bucket at all (a pool built entirely from boolean questions round-robins over one
+    sequence, not three) -- `_round_robin_merge` already skips an absent/exhausted sequence
+    gracefully.
+
+    Residual limitation, deliberately left alone (out of scope for this pass, per the
+    investigation that motivated this function): this guarantees each present type a FAIR
+    TURN, not a fair absolute score. Multiple_choice's TVD in particular has a much higher
+    noise floor than boolean/number's metrics for realistic sample sizes -- it rarely gets
+    close to exactly 0 even for a genuinely near-uniform real-world distribution -- so an MC
+    candidate can still struggle to *win* a similarity slot purely on its own merit within
+    its own turn. Round-robin fixes the fairness-of-opportunity bug (MC now always gets
+    turns); it does not and cannot fix TVD's absolute noise floor, which would need a
+    different, sample-size-aware similarity threshold to address."""
+    buckets: dict[str, list] = {}
+    for item in items:
+        buckets.setdefault(item.question_type, []).append(item)
+    ordered_buckets = [buckets[t] for t in _QUESTION_TYPE_ORDER if t in buckets]
+    for bucket in ordered_buckets:
+        bucket.sort(key=lambda s: abs(s.score), reverse=reverse)
+    return [item for _index, item in _round_robin_merge(ordered_buckets, n)]
 
 
 # How many entries the combined "top 10, all categories" panel surfaces (Johan's decision,
@@ -386,7 +514,7 @@ _SIMILARITY_CATEGORIES = [
 ]
 
 
-def _highlight_identity(item, is_pairwise: bool):
+def _highlight_identity(item):
     """De-duplication key for a Suggestion/PairwiseSuggestion: identifies "the same finding"
     regardless of which category list it was drawn from. Needed because a single (question,
     breakdown, group) vs-overall entry can legitimately be the extreme of BOTH the
@@ -394,10 +522,14 @@ def _highlight_identity(item, is_pairwise: bool):
     -- in a pool small enough that "most different" and "most similar" overlap (see
     compute_suggestions()'s docstring) -- `most_similar[0]` can literally be the same entry as
     `most_different[0]`. Either way the combined top-10 should show that finding once, not
-    twice under two labels. Pairwise identity uses a frozenset of the two group labels so
-    swapping which side landed in group_a/group_b (an itertools.combinations incidental, per
-    _score_pools) doesn't produce a false non-duplicate."""
-    if is_pairwise:
+    twice under two labels. Which shape `item` is (vs-overall or pairwise) is read off its
+    own type rather than passed in separately -- a Suggestion and a PairwiseSuggestion are
+    never mixed within one pool, so `isinstance` is exactly as reliable as a caller-supplied
+    flag here, with one fewer argument to keep in sync. Pairwise identity uses a frozenset of
+    the two group labels so swapping which side landed in group_a/group_b (an
+    itertools.combinations incidental, per _score_pools) doesn't produce a false
+    non-duplicate."""
+    if isinstance(item, PairwiseSuggestion):
         return (item.question_id, item.breakdown, frozenset({item.group_a_label, item.group_b_label}))
     return (item.question_id, item.breakdown, item.group_label)
 
@@ -451,7 +583,14 @@ def _build_highlights(lists: SuggestionLists) -> list[Highlight]:
     picks -- this only affects on-page order (screen_control.html is free to lay these out
     differently, e.g. visually pinning the similarity card(s) instead of listing them first;
     Johan's decision left presentation to implementation), it does not affect which findings
-    end up included."""
+    end up included.
+
+    The actual pool-vs-pool interleaving (phase 2) is `_round_robin_merge` -- the same
+    generic helper `_type_balanced_top_n` now uses one level down, to interleave a single
+    pool's candidates across question types instead of across these four category lists.
+    Both are "take turn 0 from everyone present, then turn 1, skip the exhausted ones" --
+    this function only supplies the four category pools (with their own metadata) and the
+    de-dup set; the merge order and exhaustion handling live in one place."""
     seen: set = set()
     highlights: list[Highlight] = []
 
@@ -460,7 +599,7 @@ def _build_highlights(lists: SuggestionLists) -> list[Highlight]:
         if not pool:
             continue
         item = pool[0]
-        identity = _highlight_identity(item, is_pairwise)
+        identity = _highlight_identity(item)
         if identity in seen:
             continue
         seen.add(identity)
@@ -471,21 +610,10 @@ def _build_highlights(lists: SuggestionLists) -> list[Highlight]:
         (getattr(lists, pool_name), pool_name, category_label, score_label, is_pairwise)
         for pool_name, category_label, score_label, is_pairwise in _EXTREME_CATEGORIES
     ]
-    extreme_picks: list[Highlight] = []
-    rank = 0
-    while len(extreme_picks) < remaining and any(rank < len(pool) for pool, *_rest in extreme_pools):
-        for pool, pool_name, category_label, score_label, is_pairwise in extreme_pools:
-            if len(extreme_picks) >= remaining:
-                break
-            if rank >= len(pool):
-                continue  # this pool exhausted at this rank -- skip it, don't pad, move on
-            item = pool[rank]
-            identity = _highlight_identity(item, is_pairwise)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            extreme_picks.append(_make_highlight(item, pool_name, category_label, score_label, is_pairwise, is_similarity=False))
-        rank += 1
+    picks = _round_robin_merge(
+        [pool for pool, *_rest in extreme_pools], remaining, seen=seen, identity_fn=_highlight_identity
+    )
+    extreme_picks = [_make_highlight(item, *extreme_pools[index][1:], is_similarity=False) for index, item in picks]
 
     highlights.extend(extreme_picks)
     return highlights
@@ -499,23 +627,23 @@ def compute_suggestions(top_n: int = TOP_N) -> SuggestionLists:
     they can legitimately share entries -- e.g. 6 total scored candidates means the top 5
     and bottom 5 overlap in 4 of 5 slots. That's just what "most extreme" and "least
     extreme" mean when there's barely anything to rank; nothing special-cases it, the same
-    way PLAN.md's original single-list design never needed to."""
+    way PLAN.md's original single-list design never needed to.
+
+    Each of the six lists is sliced from its pool via `_type_balanced_top_n`, not a plain
+    `sort(key=abs(score))[:top_n]` -- see that function's docstring for why a literal
+    cross-type magnitude sort is wrong here (boolean/multiple_choice/number scores are not
+    the same unit) and for the concrete before/after impact on this app's real seeded data."""
     pools = _score_pools()
     effect_size_pool, effect_size_pairwise_pool = pools["effect_size"]
-    effect_size_pool.sort(key=lambda s: abs(s.score), reverse=True)
-    most_different = effect_size_pool[:top_n]
-    most_similar = list(reversed(effect_size_pool))[:top_n]  # same pool, opposite (ascending |score|) tail
+    most_different = _type_balanced_top_n(effect_size_pool, top_n, reverse=True)
+    most_similar = _type_balanced_top_n(effect_size_pool, top_n, reverse=False)  # same pool, opposite (ascending |score|) tail
 
-    effect_size_pairwise_pool.sort(key=lambda s: abs(s.score), reverse=True)
-    most_different_pairwise = effect_size_pairwise_pool[:top_n]
-    most_similar_pairwise = list(reversed(effect_size_pairwise_pool))[:top_n]
+    most_different_pairwise = _type_balanced_top_n(effect_size_pairwise_pool, top_n, reverse=True)
+    most_similar_pairwise = _type_balanced_top_n(effect_size_pairwise_pool, top_n, reverse=False)
 
     pct_gap_pool, pct_gap_pairwise_pool = pools["simple_pct_gap"]
-    pct_gap_pool.sort(key=lambda s: abs(s.score), reverse=True)
-    biggest_pct_gap = pct_gap_pool[:top_n]
-
-    pct_gap_pairwise_pool.sort(key=lambda s: abs(s.score), reverse=True)
-    biggest_pct_gap_pairwise = pct_gap_pairwise_pool[:top_n]
+    biggest_pct_gap = _type_balanced_top_n(pct_gap_pool, top_n, reverse=True)
+    biggest_pct_gap_pairwise = _type_balanced_top_n(pct_gap_pairwise_pool, top_n, reverse=True)
 
     lists = SuggestionLists(
         most_different=most_different,
