@@ -297,6 +297,55 @@ container and real seeded data. Screenshots taken during this session (kept, not
 pre-fix/broken versions (`mc_age.png`, `bool_age.png`, `bool_age2.png`) kept alongside them
 as a record of what the two real bugs above actually looked like before the fix.
 
+## Session summary (2026-09-07)
+
+Reported: viewing `/screen/` on a phone, the Podium/Bouquet reveal's scaling was jumpy.
+`screen_display.html` renders Podium/Bouquet into a fixed 1920x1080 `#style-canvas`, scaled
+to fit whatever's plugged in — until this session, via JS (`fitStyleCanvas()`, reading
+`window.innerWidth/innerHeight`, re-run on `window.resize` and every `htmx:afterSwap`).
+
+Two likely causes, diagnosed from the code plus well-established (MDN/WebKit-documented)
+mobile-browser behavior — **not** reproduced on an actual phone from this dev sandbox, worth
+being explicit about since that gap matters and this project has a habit of saying so rather
+than overclaiming:
+1. **Confirmed present** (by direct inspection): the page had no `<meta name="viewport">`
+   tag at all. Without one, mobile browsers render into a virtual ~980px-wide desktop
+   viewport and scale the whole page down to fit the real screen — so `fitStyleCanvas()`'s
+   `innerWidth/innerHeight` reads never matched the real device pixels.
+2. **Well-founded, not directly reproduced**: mobile browsers fire `resize` repeatedly while
+   the address bar shows/hides during scroll; with no debounce, `fitStyleCanvas()` would
+   re-run several times in quick succession, each with a slightly different `innerHeight` —
+   visible as the canvas stepping through scale/position values rather than settling once.
+
+Fix chosen over a smaller JS patch (add the meta tag + debounce): replace the whole
+scaling mechanism with pure CSS **container query units** (`cqw`/`cqh`), removing the
+`resize`-listener bug class entirely rather than mitigating it, since a prototype proved
+cheap enough to be worth it. Prototyped and verified in isolation first (headless-Chrome
+screenshots at five sizes, matching the old JS's exact scale/centering output) before
+touching the real template — two non-obvious gotchas surfaced there and are preserved in
+`screen_display.html`'s own comment: `calc()` dividing a length by a bare number (not
+another length) silently produces a length instead of the unitless factor `scale()` needs;
+and `position:absolute;margin:auto` does not center a box larger than its container (auto
+margins never go negative), so centering is an explicit `translate()` calc instead.
+
+Only `screen_display.html` changed — confirmed (by grep and by reasoning about what the
+mechanism actually touches) that `_podium.html`, every `_bouquet*.html`, and
+`screen_styles.css` only depend on the fixed 1920x1080 canvas existing, not on how it gets
+scaled. `/screen/concepts/<n>/`'s own preview shell (`screen_concept_base.html`) has a
+*separate* copy of the same JS-scaler idea (different ids, `#concept-viewport`/
+`#concept-scale`) — already has its own viewport meta tag so it doesn't have bug #1, but
+would have the same bug #2 in principle. Deliberately left alone this session (out of
+scope: those are frozen-data preview routes, not the live host tool) — noted here rather
+than silently leaving a known-equivalent bug unmentioned.
+
+Verified against the real running container: Podium and Bouquet reveals, plus the idle and
+GENERIC-style states (which don't use `#style-canvas` at all and must be unaffected), each
+screenshotted at 1920x1080 (fills edge-to-edge, scale=1), 390x844 (phone portrait — the
+actual reported case), 844x390 (phone landscape), and 3840x1080 (ultrawide/4K projector —
+regression-guarded since it has its own git history in this file). All centered, fully
+visible, letterbox blending into each style's own background with no seam. 104 tests still
+pass (template-only change).
+
 ## Possible next steps
 
 Roughly in order of how self-contained each one is — none of this is started.
@@ -335,3 +384,9 @@ Roughly in order of how self-contained each one is — none of this is started.
    `GENERIC` — either to `AUTO` (if #4 shipped) or straight to `PODIUM`/`BOUQUET` for a
    fresh `BigScreenState` row. Cheap, one-line change, but only do it after using the
    feature live — don't flip the default speculatively.
+6. **Port `/screen/concepts/<n>/`'s own JS scaler** (`screen_concept_base.html`,
+   `#concept-viewport`/`#concept-scale`) to the same `cqw`/`cqh` container-query-units
+   technique `screen_display.html` got in the 2026-09-07 session above — same
+   resize-listener bug class in principle, just not the one that was actually reported
+   (deliberately left alone that session as out of scope: those are frozen-data preview
+   routes, not the live host tool). Small, mechanical, same pattern already proven to work.

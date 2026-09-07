@@ -3,6 +3,7 @@
 <html lang="sv">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Party Pulse</title>
   <script src="{% static 'pulse/vendor/htmx.min.js' %}"></script>
   <link rel="stylesheet" href="{% static 'pulse/style.css' %}">
@@ -32,13 +33,78 @@
     /* Podium/Bouquet are fixed 1920x1080 canvases (see screen_styles/_podium.html and
        _bouquet.html) -- authored for the design exploration's artboards, not for this
        page's fluid .screen layout. #style-canvas-viewport escapes .screen's flex/padding
-       (position:fixed is relative to the viewport, not its DOM parent) and the JS below
-       scales #style-canvas to fit whatever's actually plugged in -- a laptop preview
-       window or a 4K projector -- the same "fit to screen" approach as the standalone
-       /screen/concepts/<n>/ previews. Absent for GENERIC reveals and the idle/question-only
-       states, which still render through .screen normally. */
-    #style-canvas-viewport { position: fixed; inset: 0; overflow: hidden; z-index: 1; }
-    #style-canvas { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; transform-origin: top left; }
+       (position:fixed is relative to the viewport, not its DOM parent) and #style-canvas
+       is scaled/centered inside it to fit whatever's actually plugged in -- a laptop
+       preview window or a 4K projector -- the same "fit 1920x1080 to whatever's plugged
+       in" idea as the standalone /screen/concepts/<n>/ previews (those still use their own
+       JS scaler, screen_concept_base.html -- a separate file/mechanism, deliberately left
+       alone by this change, see the 2026-09-07 write-up in docs/screen-styles.md). Absent
+       for GENERIC reveals and the idle/question-only states, which still render through
+       .screen normally.
+
+       This was a JS scaler here too until 2026-09-07 (window.innerWidth/innerHeight read
+       in a fitStyleCanvas() re-run on window "resize" and htmx:afterSwap). Replaced with
+       pure CSS container query units after the host reported real jumpiness viewing this
+       page on their phone. The two causes below are diagnosed from the code plus
+       well-established mobile-browser behavior (MDN/WebKit-documented), not reproduced on
+       an actual device from a dev sandbox -- said plainly since this codebase cares about
+       not overclaiming verification that didn't happen (see docs/screen-styles.md's
+       2026-09-07 entry for the full writeup, including what WAS and wasn't confirmed):
+         1. This page had no <meta name="viewport"> (now added above), so mobile browsers
+            fell back to rendering into a virtual ~980px-wide desktop viewport and scaling
+            the *whole page* down to fit the real screen -- which fed the JS scaler
+            innerWidth/innerHeight values that didn't match the real device pixels at all.
+         2. Independent of (1): mobile browsers fire `resize` repeatedly while the address
+            bar shows/hides during scroll, so fitStyleCanvas() re-ran several times in
+            quick succession, each with a slightly different innerHeight -- visible as the
+            canvas stepping through scale/position values instead of settling once.
+       Adding the viewport tag alone would have fixed (1) but not (2); cqw/cqh removes the
+       resize-listener mechanism entirely (no JS, no listener, nothing to fire repeatedly),
+       so (2)'s whole bug class is gone rather than merely debounced.
+
+       How it works: container-type:size turns #style-canvas-viewport's own box into a
+       query container (this needs an explicit size, which its position:fixed;inset:0
+       already provides), so 1cqw/1cqh inside #style-canvas mean 1% of that container's
+       real width/height -- always the actual viewport, phone address-bar chrome and all,
+       unlike vw/vh on a page with no viewport meta tag. --scale is the smaller of
+       (container width / 1920px) and (container height / 1080px) -- letterbox to whichever
+       axis is tighter, the same Math.min(innerWidth/1920, innerHeight/1080) the old JS
+       computed -- and the translate() centers the scaled box in whichever axis has slack.
+
+       Prototyped and verified in isolation before porting here: headless-Chrome
+       screenshots at five sizes (1920x1080, 390x844 phone portrait, 844x390 phone
+       landscape, 3840x1080 ultrawide/4K projector, 800x800) matched the old JS's
+       scale/position output exactly. Two non-obvious gotchas found during that and
+       preserved below:
+         - calc() dividing a length by a length yields a unitless number, but a length
+           divided by a bare *number* is still a length -- `calc(100cqw / 1920)` would
+           silently no-op inside scale() (which requires a unitless factor). Must divide by
+           `1920px`/`1080px` (length over length), not `1920`/`1080`.
+         - position:absolute;inset:0;margin:auto does NOT center a box larger than its
+           container -- auto margins never go negative, so that classic centering trick
+           quietly fails here. Centering is an explicit translate() calc instead. */
+    #style-canvas-viewport {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      z-index: 1;
+      container-type: size;
+    }
+    #style-canvas {
+      --scale: min(calc(100cqw / 1920px), calc(100cqh / 1080px));
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1920px;
+      height: 1080px;
+      transform-origin: top left;
+      transform:
+        translate(
+          calc((100cqw - 1920px * var(--scale)) / 2),
+          calc((100cqh - 1080px * var(--scale)) / 2)
+        )
+        scale(var(--scale));
+    }
   </style>
 </head>
 <body>
@@ -46,24 +112,5 @@
     <p class="screen-word">Party<span>Pulse</span></p>
     {% include "pulse/_pulse_line.html" with animated=True %}
   </div>
-  <script>
-    // Bound once on the outer page (not inside the polled fragment -- htmx swaps
-    // #screen-state's innerHTML every 2s, and re-attaching a resize listener each time
-    // would leak one per poll). htmx:afterSwap covers every poll; the two direct calls
-    // below cover the very first paint and any projector/window resize in between.
-    (function () {
-      function fitStyleCanvas() {
-        var stage = document.getElementById("style-canvas");
-        if (!stage) return; // GENERIC / idle states render through .screen, not this canvas
-        var scale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-        stage.style.transform = "scale(" + scale + ")";
-        stage.style.left = ((window.innerWidth - 1920 * scale) / 2) + "px";
-        stage.style.top = ((window.innerHeight - 1080 * scale) / 2) + "px";
-      }
-      document.body.addEventListener("htmx:afterSwap", fitStyleCanvas);
-      window.addEventListener("resize", fitStyleCanvas);
-      fitStyleCanvas();
-    })();
-  </script>
 </body>
 </html>
