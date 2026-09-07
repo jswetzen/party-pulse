@@ -82,16 +82,82 @@
            `1920px`/`1080px` (length over length), not `1920`/`1080`.
          - position:absolute;inset:0;margin:auto does NOT center a box larger than its
            container -- auto margins never go negative, so that classic centering trick
-           quietly fails here. Centering is an explicit translate() calc instead. */
+           quietly fails here. Centering is an explicit translate() calc instead.
+
+       THIRD gotcha, found 2026-09-07 on the real deployment (partypuls.mikro.swetzen.com,
+       real 2560x1068 window) and NOT caught by the headless-Chrome-only prototyping above --
+       exactly the failure mode this project's own "don't overclaim verification" habit warns
+       about: `calc(100cqw / 1920px)` computes `--scale` correctly in Chrome but resolves to
+       an invalid value in Firefox, silently falling back to no transform at all
+       (`getComputedStyle` showed `transform: none`, canvas rendered at its literal 1920x1080
+       pinned top-left). Root cause per real-browser testing plus published cross-engine
+       reports (this is a known, still-open W3C spec gap, not a mistake here): Firefox's
+       calc() only reliably resolves a length-divided-by-length into the unitless <number>
+       scale() needs when both operands carry the *same literal unit token* -- `px / px` or
+       `vw / vw` -- and treats `cqw / px` as unresolvable even though both are nominally
+       "length" type. `CSS.supports('width', '1cqw')` is true in that same Firefox, so this
+       is not a missing-feature case @supports could branch on; it only shows up as a silent
+       computed-value failure.
+
+       Fix: register --cw/--ch as typed custom properties via @property (syntax: "<length>")
+       so the browser resolves 100cqw/100cqh into a real internal length value up front,
+       instead of leaving them as raw cqw-unit token text for calc() to divide later -- then
+       derive the unitless ratio via the tan(atan2(a, b)) scalar-cast trick (atan2's two
+       arguments may be any consistent unit -- including two *different* length units --
+       because trig functions cast their arguments to plain numbers/angles rather than
+       carrying the length type through division; tan(atan2(a, b)) recovers a/b as a bare
+       number). This reportedly sidesteps the mixed-unit calc-division restriction across
+       engines and was verified to do so here -- see the verification note below. @property
+       itself needs Firefox 128+/Chrome 85+, both comfortably older than this project's
+       actual target browsers (a recent Chrome and a recent Firefox, per the two engines this
+       was verified against), so it isn't trading one compatibility gap for another.
+
+       FOURTH gotcha, caught immediately by the verification below rather than shipped blind
+       (the whole reason this fix is being verified in a real Firefox at all): @property's
+       `inherits` flag defaults tempting-looking-but-wrong to `false` in every example this
+       was drafted from. --cw/--ch are *set* on #style-canvas-viewport but *read* via var() on
+       #style-canvas, a descendant -- with `inherits: false`, a registered custom property
+       does not cascade to child elements at all, so #style-canvas saw the initial-value 0px
+       for both instead of the viewport's real size, and every atan2(0px, ...) collapsed
+       --scale to 0 (transform: matrix(0,0,0,0,0,0) -- box scaled to nothing, worse than the
+       original bug's unscaled-but-at-least-visible failure). Must be `inherits: true`.
+
+       Verified 2026-09-07 in real (non-headless-only) browsers driven via WebDriver --
+       geckodriver + Selenium for Firefox 152.0.4, chromedriver + Selenium for Chromium
+       148.0.7778.167, both from this dev sandbox (not the production host) -- checking
+       getComputedStyle(#style-canvas).transform (must not be "none") and
+       getBoundingClientRect() at five sizes: 1920x1080, 390x844 (phone portrait), 844x390
+       (phone landscape), 2560x1068 (the exact size that broke on the live deployment), and
+       3840x1080 (ultrawide/4K). Before this fix, Firefox showed transform:"none" and a
+       pinned 1920x1080 rect at every size (reproducing the reported bug exactly); Chrome
+       already showed a correct scale matrix and centered rect at every size. After this
+       fix, both engines show a real scale() matrix and a correctly letterboxed/centered
+       rect at all five sizes. NOT verified: an actual physical phone (same caveat as the
+       2026-09-07 CSS-only rewrite above -- phone sizes here are desktop-browser window
+       dimensions, not a real mobile viewport/address-bar-chrome situation), and not
+       re-verified against the live production deployment itself (only this dev sandbox's
+       local server). */
+    @property --cw {
+      syntax: "<length>";
+      inherits: true;
+      initial-value: 0px;
+    }
+    @property --ch {
+      syntax: "<length>";
+      inherits: true;
+      initial-value: 0px;
+    }
     #style-canvas-viewport {
       position: fixed;
       inset: 0;
       overflow: hidden;
       z-index: 1;
       container-type: size;
+      --cw: 100cqw;
+      --ch: 100cqh;
     }
     #style-canvas {
-      --scale: min(calc(100cqw / 1920px), calc(100cqh / 1080px));
+      --scale: min(tan(atan2(var(--cw), 1920px)), tan(atan2(var(--ch), 1080px)));
       position: absolute;
       top: 0;
       left: 0;
@@ -100,8 +166,8 @@
       transform-origin: top left;
       transform:
         translate(
-          calc((100cqw - 1920px * var(--scale)) / 2),
-          calc((100cqh - 1080px * var(--scale)) / 2)
+          calc((var(--cw) - 1920px * var(--scale)) / 2),
+          calc((var(--ch) - 1080px * var(--scale)) / 2)
         )
         scale(var(--scale));
     }

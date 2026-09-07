@@ -346,6 +346,66 @@ regression-guarded since it has its own git history in this file). All centered,
 visible, letterbox blending into each style's own background with no seam. 104 tests still
 pass (template-only change).
 
+## Session summary (2026-09-07, follow-up: Firefox regression from the cqw/cqh rewrite)
+
+Reported live, on the real deployment (partypuls.mikro.swetzen.com, maximized window, real
+2560x1068 viewport, an up-to-date Firefox): the Podium/Bouquet canvas filled only the top-left
+~3/4 of the screen, unscaled, instead of letterboxing to fit. This is the exact regression the
+session above's own text worried about without knowing it yet -- that rewrite's prototyping
+was headless-Chrome only, and this bug is Firefox-only.
+
+Root cause, confirmed by inspecting `getComputedStyle(#style-canvas)` on the live page:
+`transform: "none"`. The CSS-only rewrite's `--scale: min(calc(100cqw / 1920px), calc(100cqh /
+1080px))` divides a `cqw`/`cqh` length by a `px` length to get the unitless factor `scale()`
+needs -- and Chrome resolves that fine, but Firefox's `calc()` only reliably turns a
+length-divided-by-length into a unitless `<number>` when both operands carry the *identical*
+unit token (`px / px`, `vw / vw`); mixed units like `cqw / px` resolve to nothing, and the
+whole `transform` declaration is dropped as invalid rather than degrading gracefully. This is
+a real, still-open cross-engine spec gap, not a mistake in the earlier session's reasoning --
+`CSS.supports('width', '1cqw')` is `true` in the same Firefox, so it isn't a
+`@supports`-detectable missing feature either; it's a silent computed-value failure.
+
+Fix: register `--cw`/`--ch` as typed custom properties via `@property` (`syntax: "<length>"`),
+which forces the browser to resolve `100cqw`/`100cqh` to a real internal length value instead
+of leaving them as raw cqw-unit token text for `calc()` to divide -- then derive the unitless
+ratio via `tan(atan2(a, b))` instead of `calc(a / b)`, which sidesteps the mixed-unit
+restriction because trig functions cast their arguments to angles/numbers rather than
+carrying the length type through the division. Two more non-obvious gotchas surfaced while
+verifying this (both preserved in `screen_display.html`'s own comment, alongside the two the
+2026-09-06 rewrite already documented there):
+  - `@property`'s `inherits` flag defaults to `false` in every reference example this was
+    drafted from, which is wrong here: `--cw`/`--ch` are *set* on `#style-canvas-viewport` but
+    *read* via `var()` on `#style-canvas`, a descendant. With `inherits: false` a registered
+    custom property does not cascade to children at all, so the descendant saw the
+    initial-value `0px` instead of the real size, and `--scale` silently collapsed to `0` --
+    an even worse failure (canvas scaled to nothing) than the original bug (canvas merely
+    unscaled). Caught immediately by testing in a real Firefox rather than trusting the
+    pattern, which was the entire point of insisting on that verification here.
+  - `@property` itself needs Firefox 128+/Chrome 85+ -- comfortably below this project's
+    actual target browsers (a recent Chrome, a recent Firefox), so it isn't trading one
+    compatibility gap for a worse one.
+
+**Verified how, honestly**: real (non-headless-only) Firefox 152.0.4 and Chromium
+148.0.7778.167, both driven via WebDriver (geckodriver+Selenium, chromedriver+Selenium) from
+this dev sandbox against a local `manage.py runserver` with a seeded Bouquet reveal --
+`getComputedStyle(#style-canvas).transform` and `getBoundingClientRect()` checked at
+1920x1080, 390x844 (phone portrait), 844x390 (phone landscape), 2560x1068 (the exact size that
+broke live), and 3840x1080 (ultrawide/4K). Before the fix, Firefox reproduced the reported bug
+exactly (`transform: none`, pinned unscaled 1920x1080 rect) at every size while Chrome already
+showed a correct scale matrix; after the fix, both engines show a real `scale()` matrix and a
+correctly letterboxed/centered rect at all five sizes. **Not verified**: an actual physical
+phone (same caveat as the session above -- these "phone" sizes are desktop-browser window
+dimensions, not a real mobile viewport/address-bar situation) and the live production
+deployment itself (only this dev sandbox's local server, on a fresh SQLite DB seeded via
+`seed_questions`/`seed_demo_data`, was checked). 106 tests pass (template-only change; the
+count grew from 104 via unrelated commits earlier on this branch).
+
+An earlier draft of this fix (both `@property` declarations using `inherits: false`, the
+`inherits: true` gotcha above not yet found) was tested and rejected in this same session --
+worth recording since it's a reminder that "the documented workaround exists" and "this
+specific adaptation of it works" are different claims, and only the second one is what actual
+verification in a real engine can confirm.
+
 ## Possible next steps
 
 Roughly in order of how self-contained each one is — none of this is started.
