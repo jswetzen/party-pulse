@@ -28,11 +28,12 @@ option was "featured" over equally-valid others (fixed with a dedicated equal-we
 component). The admin's question list also gained bulk actions (multi-select → make live/draft/
 archive) — originally only bulk-delete existed.
 
-Not yet built: step 5 (guessing-game mode is a selectable field in the host console and data
-model, but the big-screen template doesn't yet render it differently from statistics mode — see
-"Guessing game mode" below) and step 6 (suggestion review goes through the plain Django admin,
-which already gained the bulk-action treatment above — a dedicated host-console queue UI would
-be pure polish at this point, not a functional gap).
+Not yet built: step 5 (guessing-game mode is a field in the data model, but the big-screen
+template doesn't yet render it differently from statistics mode, so its host-console dropdown
+is hidden rather than offered as a live-looking no-op — see "Guessing game mode" below) and
+step 6 (suggestion review goes through the plain Django admin, which already gained the
+bulk-action treatment above — a dedicated host-console queue UI would be pure polish at this
+point, not a functional gap).
 
 ## Anonymity model
 
@@ -446,9 +447,12 @@ the 28 seeded questions (content work, not architecture).
 2. ~~Guest app identity + seeded questions~~ — done (28 questions via `seed_questions`)
 3. ~~Host console question manager (via admin) + big screen control panel~~ — done
 4. ~~Big screen display with polling, statistics mode only~~ — done
-5. **Guessing game mode** — `BigScreenState.mode` exists and is selectable in the host console,
-   but `pulse/templates/pulse/_screen_state.html` doesn't yet render it differently from
-   statistics mode (no "couple guesses first, then reveal" framing/UI). Next thing to build.
+5. **Guessing game mode** — `BigScreenState.mode` exists, but nothing downstream ever reads
+   it: `pulse/templates/pulse/_screen_state.html` doesn't yet render it differently from
+   statistics mode (no "couple guesses first, then reveal" framing/UI). Since the field was
+   a functional no-op, its host-console dropdown was hidden (2026-09, `screen_control.html`,
+   wrapped in `{% comment %}` rather than removed) rather than shown as a live-looking
+   selectable option; unhide it once this mode is actually built.
 6. Dedicated suggestion submission + review queue UI (currently: admin) — optional polish, admin
    already covers the functional need
 7. Polish: styling pass for projector legibility beyond the current baseline CSS, verify Swedish

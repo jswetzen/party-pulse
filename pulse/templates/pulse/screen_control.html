@@ -12,12 +12,17 @@
 
     <form method="post" class="card" id="screen-control-form">
       {% csrf_token %}
-      <label>Läge
-        <select name="mode">
-          <option value="statistics" {% if state.mode == "statistics" %}selected{% endif %}>Statistik</option>
-          <option value="guessing_game" {% if state.mode == "guessing_game" %}selected{% endif %}>Gissningslek</option>
-        </select>
-      </label>
+      {% comment %}
+        Läge (BigScreenState.mode) is hidden here on purpose, not deleted -- the field
+        itself, this dropdown's markup, and views.screen_control()'s `state.mode = ...`
+        line are cheap to bring back, but nothing downstream ever reads state.mode: not
+        screen_state() in views.py, not any template. Guessing-game mode was speced but
+        never built (PLAN.md "Guessing game mode" backlog item, ~line 449) -- exposing a
+        dropdown that visibly does nothing was confusing, so 2026-09 pulled it from the
+        console rather than leaving a selectable no-op in front of the host. Restore this
+        block (and stop defaulting it away server-side) once the guessing-game render path
+        actually exists.
+      {% endcomment %}
       <label>Fråga
         <select name="question" id="id_question">
           <option value="">—</option>
