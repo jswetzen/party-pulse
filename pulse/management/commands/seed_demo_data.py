@@ -111,8 +111,13 @@ BOOLEAN_BIASES = {
         "sex": {"Kvinna": 0.82, "Man": 0.30},
     },
     # Age-graded: young guests plan to dance all night, the oldest generation mostly not.
+    # The old single "50 eller äldre" bucket split into "50-59 år"/"60+ år" (see
+    # pulse/models.py, 2026-09-07) -- graded rather than copying one p to both, since the
+    # whole point of the split was that a 50-something and a 70-something don't actually
+    # behave the same here: 50-59 is still parents'-generation-at-a-wedding energy (some
+    # will absolutely stay for the last song), 60+ mostly calls it a night earlier.
     "Tänker du dansa kvar tills orkestern packar ihop?": {
-        "age": {"Under 20": 0.85, "20-talet": 0.75, "50 eller äldre": 0.15},
+        "age": {"Under 20 år": 0.85, "20-29 år": 0.75, "50-59 år": 0.25, "60+ år": 0.08},
     },
     # Plus-ones are nervous meeting "the other side"'s family; friends/family of either
     # side mostly aren't -- thematically sensible, not just noise.
@@ -138,16 +143,29 @@ BOOLEAN_BIASES = {
 MC_BIASES = {
     # Older guests skew hot-drink/non-fizzy, under-20s skew sweet/fizzy -- age-graded
     # multiple-choice divergence (TVD-scored) to complement the boolean ones above.
+    # "50 eller äldre" split into "50-59 år"/"60+ år" (see pulse/models.py, 2026-09-07);
+    # unlike the boolean dance-bias above, the 60+ weights here just push the same
+    # hot-drink skew a bit further rather than being a wholly different profile -- coffee
+    # preference doesn't swing as sharply between "50s" and "70s" as staying-power-on-the-
+    # dancefloor does, so a milder gradient between the two buckets is more believable
+    # than either copying 50-59's exact table or inventing an unrelated 60+ shape.
     "Vad fyller du glaset med ikväll?": {
         "age": {
-            "50 eller äldre": {
+            "50-59 år": {
                 "Kaffe eller te": 5,
                 "Saft eller lemonad": 1,
                 "Ett stort glas kallt vatten": 1,
                 "Något bubbligt och alkoholfritt": 1,
                 "Fläderdryck eller något med bär": 2,
             },
-            "Under 20": {
+            "60+ år": {
+                "Kaffe eller te": 6,
+                "Saft eller lemonad": 0.5,
+                "Ett stort glas kallt vatten": 1,
+                "Något bubbligt och alkoholfritt": 0.5,
+                "Fläderdryck eller något med bär": 2,
+            },
+            "Under 20 år": {
                 "Kaffe eller te": 0.3,
                 "Saft eller lemonad": 5,
                 "Ett stort glas kallt vatten": 1,
@@ -184,9 +202,13 @@ NUMBER_BIASES = {
     "Hur många kanelbullar kan du äta i ett sträck?": {
         "side": {"Brudens sida": (6, 2), "Brudgummens sida": (1.5, 1)},
     },
-    # Under-20s take way more phone photos than the 50+ crowd.
+    # Under-20s take way more phone photos than the 50+ crowd. "50 eller äldre" split into
+    # "50-59 år"/"60+ år" (see pulse/models.py, 2026-09-07) -- graded downward rather than
+    # giving both the same (12, 8): 50-somethings are still fairly phone-active, while the
+    # 60+ crowd takes meaningfully fewer photos still, same direction as the age trend the
+    # unsplit bucket was already showing.
     "Hur många bilder tror du att du tar med mobilen ikväll?": {
-        "age": {"Under 20": (140, 40), "50 eller äldre": (12, 8)},
+        "age": {"Under 20 år": (140, 40), "50-59 år": (18, 9), "60+ år": (8, 5)},
     },
     # --- "Mest lika" showcases: travel distance by side, and years-known-the-couple by
     # sex -- both left unbiased on purpose (you might expect e.g. one side to have

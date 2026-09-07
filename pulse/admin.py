@@ -7,11 +7,12 @@ from .models import BigScreenState, Question, Respondent, Response
 # since a SimpleListFilter needs both the lookup value and a queryset-filterable (min, max) range
 # per bucket, not just a label.
 _AGE_BUCKET_RANGES = [
-    ("under_20", "Under 20", (None, 20)),
-    ("20s", "20-talet", (20, 30)),
-    ("30s", "30-talet", (30, 40)),
-    ("40s", "40-talet", (40, 50)),
-    ("50_plus", "50 eller äldre", (50, None)),
+    ("under_20", "Under 20 år", (None, 20)),
+    ("20s", "20-29 år", (20, 30)),
+    ("30s", "30-39 år", (30, 40)),
+    ("40s", "40-49 år", (40, 50)),
+    ("50s", "50-59 år", (50, 60)),
+    ("60_plus", "60+ år", (60, None)),
 ]
 
 

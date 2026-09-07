@@ -18,16 +18,17 @@ _BREAKDOWN_FIELD = {
 }
 
 # Chronological (not lexicographic) order for AGE breakdown labels, keyed by each
-# bucket's decade start -- plain `sorted()` on the labels themselves puts "Under 20"
-# after "50 eller äldre" ('U' > '5' in codepoint order), which reads as nonsense on
+# bucket's decade start -- plain `sorted()` on the labels themselves puts "Under 20 år"
+# after "60+ år" ('U' > '6' in codepoint order), which reads as nonsense on
 # the big screen. Sex/side/relation have no such ordering (their sort is purely for
 # stable, deterministic output), so this key is applied only to the AGE dimension.
 _AGE_LABEL_ORDER = {
-    "Under 20": 0,
-    "20-talet": 20,
-    "30-talet": 30,
-    "40-talet": 40,
-    "50 eller äldre": 50,
+    "Under 20 år": 0,
+    "20-29 år": 20,
+    "30-39 år": 30,
+    "40-49 år": 40,
+    "50-59 år": 50,
+    "60+ år": 60,
 }
 
 

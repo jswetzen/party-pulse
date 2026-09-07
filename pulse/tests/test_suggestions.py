@@ -523,13 +523,14 @@ def test_pairwise_lists_are_additive_not_a_replacement_for_vs_overall():
 
 
 def test_age_breakdown_pairwise_covers_every_unordered_pair_without_blowing_up():
-    # Age has more groups than sex/side/relation (up to 5 decade buckets), so pairwise
-    # combinations grow faster there -- C(5,2)=10 pairs instead of sex's single pair. This
-    # confirms every pair is actually produced (not silently truncated) and that the count
-    # matches C(n,2) exactly, not e.g. n^2 (which would double-count each pair, or wrongly
-    # include a group paired with itself).
+    # Age has more groups than sex/side/relation (up to 6 decade/age buckets since the
+    # 2026-09-07 bucket-relabel added a 6th "60+ år" bucket), so pairwise combinations grow
+    # faster there -- C(6,2)=15 pairs instead of sex's single pair. This confirms every pair
+    # is actually produced (not silently truncated) and that the count matches C(n,2)
+    # exactly, not e.g. n^2 (which would double-count each pair, or wrongly include a group
+    # paired with itself).
     question = Question.objects.create(text_sv="Hur många länder?", type=Question.Type.NUMBER, status="live")
-    ages = [15, 25, 35, 45, 55]  # one per decade bucket: Under 20 / 20-talet / .. / 50 eller äldre
+    ages = [15, 25, 35, 45, 55, 65]  # one per age bucket: Under 20 år / 20-29 år / .. / 60+ år
     for i, age in enumerate(ages):
         for v in (i, i + 1, i + 2, i + 3, i + 4):  # 5 responses/group, real internal spread
             answer(question, v, age=age)
@@ -539,7 +540,7 @@ def test_age_breakdown_pairwise_covers_every_unordered_pair_without_blowing_up()
         suggestions.most_different_pairwise + suggestions.most_similar_pairwise, BigScreenState.Breakdown.AGE
     )
 
-    assert len(age_pairs) == 10  # C(5, 2)
+    assert len(age_pairs) == 15  # C(6, 2)
 
 
 # ---------------------------------------------------------------------------

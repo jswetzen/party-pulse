@@ -3,21 +3,28 @@ import uuid
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-# Decade labels for age -> bucket display, reused by both Respondent.age_bucket_label
+# Age-bucket labels for age -> bucket display, reused by both Respondent.age_bucket_label
 # and the aggregation engine (pulse/aggregations.py). Originally these were the fixed
-# choices of a guest-facing "which decade are you in" dropdown; we now capture an exact
-# age instead (see AGE_MIN/AGE_MAX below and the age_bucket migration) and derive the
-# same labels from it at read time, so any existing "grouped by 30-talet" behaviour is
-# unchanged. Keyed by the decade's *start* (20, 30, 40) so the lookup is one dict index
-# rather than four hardcoded if/elif branches -- 50+ is handled separately below since
-# it isn't a single decade, it's "that decade or later".
+# choices of a guest-facing "which decade are you in" dropdown ("20-talet", "50 eller
+# äldre") -- we now capture an exact age instead (see AGE_MIN/AGE_MAX below and the
+# age_bucket migration) and derive a label from it at read time. Reworded 2026-09-07:
+# the old "<N>-talet" labels read as Swedish calendar decades ("the 1920s"), not age
+# brackets, and "50 eller äldre" doesn't read as natural Swedish for a person's own age
+# group either -- both replaced with "<lo>-<hi> år" / "Under 20 år" / "60+ år" phrasing.
+# Same change also splits what used to be one open-ended "50 eller äldre" bucket into
+# "50-59 år" and "60+ år": lumping a 50-year-old parent-of-the-couple in with an
+# 80-year-old grandparent under one label was too coarse a breakdown group for the big
+# screen. Keyed by the decade's *start* (20, 30, 40, 50) so the lookup is one dict index
+# rather than four hardcoded if/elif branches -- under-20 and 60+ are handled separately
+# below since they're open-ended, not a single decade.
 _DECADE_LABELS = {
-    20: "20-talet",
-    30: "30-talet",
-    40: "40-talet",
+    20: "20-29 år",
+    30: "30-39 år",
+    40: "40-49 år",
+    50: "50-59 år",
 }
-_FIFTY_PLUS_LABEL = "50 eller äldre"
-_UNDER_TWENTY_LABEL = "Under 20"
+_UNDER_TWENTY_LABEL = "Under 20 år"
+_SIXTY_PLUS_LABEL = "60+ år"
 
 # Bounds for the guest-facing exact-age input. Lower bound of 1 (not 0) because "0 years
 # old" is never a meaningful self-report at a wedding; upper bound of 119 is generous
@@ -28,18 +35,20 @@ AGE_MAX = 119
 
 
 def age_bucket_label(age: int) -> str:
-    """Map an exact age to the same Swedish decade-bucket label the old age_bucket
-    dropdown used, for continuity in aggregation/display (see PLAN.md "Demographics").
+    """Map an exact age to its Swedish age-group label, for aggregation/display (see
+    PLAN.md "Demographics"). Six buckets: "Under 20 år", "20-29 år", "30-39 år",
+    "40-49 år", "50-59 år", "60+ år".
 
-    Buckets below 20 have no equivalent in the old scheme (the dropdown started at
-    "20-talet") because self-reporting "which decade" only made sense once you're solidly
-    in one; an exact age has no such gap, so we need a label for it anyway.
+    Buckets below 20 have no equivalent in the old decade-dropdown scheme this replaced
+    (the dropdown started at "20-talet") because self-reporting "which decade" only made
+    sense once you're solidly in one; an exact age has no such gap, so we need a label
+    for it anyway.
     """
     if age < 20:
         return _UNDER_TWENTY_LABEL
+    if age >= 60:
+        return _SIXTY_PLUS_LABEL
     decade_start = (age // 10) * 10
-    if decade_start >= 50:
-        return _FIFTY_PLUS_LABEL
     return _DECADE_LABELS[decade_start]
 
 
@@ -78,7 +87,7 @@ class Respondent(models.Model):
 
     @property
     def age_bucket_label(self) -> str:
-        """Swedish decade-bucket label for this respondent's age, e.g. "30-talet".
+        """Swedish age-group label for this respondent's age, e.g. "30-39 år".
         See module-level age_bucket_label() for the bucketing rule."""
         return age_bucket_label(self.age)
 

@@ -252,25 +252,29 @@ def test_bouquet_geometry_boolean_grouped_exact_tie_is_deterministically_ja():
     assert geo["rows"][0]["winner"] == "ja"  # >= 50, not > 50 -- see the function's own comment
 
 
-def test_bouquet_geometry_boolean_grouped_five_groups_get_shorter_rows_than_two():
-    # AGE is the 5-group breakdown -- the "hardest" case row-height-wise. Rows must still be
+def test_bouquet_geometry_boolean_grouped_six_groups_get_shorter_rows_than_two():
+    # AGE is the 6-group breakdown -- the "hardest" case row-height-wise. Rows must still be
     # ordered top-to-bottom, non-overlapping, and packed into the same fixed vertical band a
     # 2-group breakdown uses (see the two-group test above).
     breakdown = {
-        "Under 20": {"count": 5, "yes_pct": 40.0},
-        "20-talet": {"count": 10, "yes_pct": 55.0},
-        "30-talet": {"count": 15, "yes_pct": 48.0},
-        "40-talet": {"count": 8, "yes_pct": 70.0},
-        "50 eller äldre": {"count": 12, "yes_pct": 33.0},
+        "Under 20 år": {"count": 5, "yes_pct": 40.0},
+        "20-29 år": {"count": 10, "yes_pct": 55.0},
+        "30-39 år": {"count": 15, "yes_pct": 48.0},
+        "40-49 år": {"count": 8, "yes_pct": 70.0},
+        "50-59 år": {"count": 6, "yes_pct": 33.0},
+        "60+ år": {"count": 6, "yes_pct": 20.0},
     }
 
     geo = _bouquet_geometry_boolean_grouped(breakdown)
 
     assert geo["count"] == 50
-    assert len(geo["rows"]) == 5
+    assert len(geo["rows"]) == 6
     tops = [row["row_top"] for row in geo["rows"]]
     assert tops == sorted(tops)  # rows read top-to-bottom in the same order compute_breakdown returned
-    assert all(b - a >= 80 for a, b in zip(tops, tops[1:]))  # never collide even at 5 rows
+    # Fixed vertical band (438px) split 6 ways is ~73px/row (was ~87.6px at 5 groups before
+    # the 2026-09-07 bucket split added a 6th AGE group) -- floor lowered from 80 to 70 to
+    # match, still comfortably below the real per-row height so rows can never overlap.
+    assert all(b - a >= 70 for a, b in zip(tops, tops[1:]))
 
     # Fewer groups -> roomier rows -> bigger type, same spirit as
     # _bouquet_geometry_multiple_choice's own real-data-driven scaling.
@@ -563,14 +567,15 @@ def test_screen_state_renders_bouquet_boolean_grouped_for_a_sex_breakdown(client
 
 
 def test_screen_state_renders_bouquet_multiple_choice_grouped_for_an_age_breakdown(client):
-    # The "hardest case" this whole effort is about: 5 age groups x a multi-option question.
+    # The "hardest case" this whole effort is about: 6 age groups x a multi-option question.
     question = make_mc_question(["Tårta", "Bakelse", "Glass"])
     ages_and_options = [
         (15, "Tårta"), (15, "Glass"),
         (25, "Tårta"), (25, "Tårta"), (25, "Bakelse"),
         (35, "Glass"),
         (45, "Bakelse"), (45, "Bakelse"),
-        (55, "Tårta"), (55, "Glass"), (55, "Glass"),
+        (55, "Tårta"), (55, "Glass"),
+        (65, "Glass"),
     ]  # fmt: skip
     for age, option in ages_and_options:
         Response.objects.create(respondent=make_respondent(age=age), question=question, answer={"value": option})
@@ -583,12 +588,12 @@ def test_screen_state_renders_bouquet_multiple_choice_grouped_for_an_age_breakdo
     assert response.status_code == 200
     bouquet = response.context["bouquet"]
     assert bouquet["kind"] == "multiple_choice_grouped"
-    assert len(bouquet["rows"]) == 5  # Under 20, 20-talet, 30-talet, 40-talet, 50 eller äldre
+    assert len(bouquet["rows"]) == 6  # Under 20, 20-29, 30-39, 40-49, 50-59, 60+ år
     assert bouquet["count"] == len(ages_and_options)
     # Rows must stay chronological (Under 20 first), not re-sorted alphabetically -- see
     # aggregations.compute_breakdown's _AGE_LABEL_ORDER.
     assert [row["label"] for row in bouquet["rows"]] == [
-        "Under 20", "20-talet", "30-talet", "40-talet", "50 eller äldre",
+        "Under 20 år", "20-29 år", "30-39 år", "40-49 år", "50-59 år", "60+ år",
     ]  # fmt: skip
     assert b"style-bouquet" in response.content
 

@@ -7,7 +7,7 @@ pytestmark = pytest.mark.django_db
 
 
 def make_respondent(**kwargs):
-    # age=35 lands in the "30-talet" bucket, matching what the old age_bucket="30s"
+    # age=35 lands in the "30-39 år" bucket, matching what the old age_bucket="30s"
     # default used to mean, so existing tests below keep grouping the way they always did.
     defaults = dict(age=35, sex="female", side="bride", relation="friend")
     defaults.update(kwargs)
@@ -33,44 +33,47 @@ def test_boolean_grouped_by_age():
 
     # Age has no stored `choices` (unlike sex/side/relation) -- _group() special-cases
     # it to bucket by decade via age_bucket_label() instead of get_<field>_display().
-    assert result["20-talet"]["yes_pct"] == 100.0
-    assert result["40-talet"]["yes_pct"] == 0.0
+    assert result["20-29 år"]["yes_pct"] == 100.0
+    assert result["40-49 år"]["yes_pct"] == 0.0
 
 
 @pytest.mark.parametrize(
     "age,expected_label",
     [
-        (1, "Under 20"),
-        (19, "Under 20"),
-        (20, "20-talet"),
-        (29, "20-talet"),
-        (30, "30-talet"),
-        (39, "30-talet"),
-        (40, "40-talet"),
-        (49, "40-talet"),
-        (50, "50 eller äldre"),
-        (119, "50 eller äldre"),
+        (1, "Under 20 år"),
+        (19, "Under 20 år"),
+        (20, "20-29 år"),
+        (29, "20-29 år"),
+        (30, "30-39 år"),
+        (39, "30-39 år"),
+        (40, "40-49 år"),
+        (49, "40-49 år"),
+        (50, "50-59 år"),
+        (59, "50-59 år"),
+        (60, "60+ år"),
+        (119, "60+ år"),
     ],
 )
 def test_age_bucket_label_boundaries(age, expected_label):
     # The one genuinely new piece of logic here is the decade-boundary math (age //
-    # 10 * 10) -- exercise every boundary explicitly rather than trusting the
-    # generalized formula on a couple of mid-decade examples.
+    # 10 * 10) -- exercise every boundary explicitly (including the 59/60 split between
+    # "50-59 år" and "60+ år") rather than trusting the generalized formula on a couple
+    # of mid-decade examples.
     assert age_bucket_label(age) == expected_label
 
 
 def test_age_breakdown_iterates_in_chronological_not_lexicographic_order():
-    # Plain lexicographic sort puts "Under 20" after "50 eller äldre" ('U' > '5' in
+    # Plain lexicographic sort puts "Under 20 år" after "60+ år" ('U' > '6' in
     # codepoint order) -- compute_breakdown must instead order AGE groups by decade so
     # the big screen doesn't render buckets in a nonsense sequence. Response order is
     # deliberately scrambled here so a passing test can't be an accident of insertion order.
     question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
-    for age in (45, 15, 55, 35, 25):
+    for age in (45, 15, 65, 55, 35, 25):
         Response.objects.create(respondent=make_respondent(age=age), question=question, answer={"value": True})
 
     result = compute_breakdown(question, BigScreenState.Breakdown.AGE)
 
-    assert list(result.keys()) == ["Under 20", "20-talet", "30-talet", "40-talet", "50 eller äldre"]
+    assert list(result.keys()) == ["Under 20 år", "20-29 år", "30-39 år", "40-49 år", "50-59 år", "60+ år"]
 
 
 def test_boolean_grouped_by_side():
