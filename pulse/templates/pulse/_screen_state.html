@@ -18,7 +18,7 @@
   </div></div>
 
 {% else %}
-  <h1 class="screen-question" style="font-size:max(1.4rem,2.6vw)">{{ state.question.text_sv }}</h1>
+  <h1 class="screen-question" style="font-size:max(1.4rem,min(2.6vw,4.6vh))">{{ state.question.text_sv }}</h1>
   {% include "pulse/_pulse_line.html" %}
 
   <div class="results">
@@ -44,7 +44,7 @@
               </div>
               <div class="result-value">{{ pct }}%</div>
             </div>
-            <div style="text-align:left;color:var(--mist);font-size:max(0.85rem, 1.3vw);margin:-0.4rem 0 0.6rem">{{ option }}</div>
+            <div style="text-align:left;color:var(--mist);font-size:max(0.85rem, min(1.3vw, 2.3vh));margin:-0.4rem 0 0.6rem">{{ option }}</div>
           {% endfor %}
 
         {% elif state.question.type == "number" %}

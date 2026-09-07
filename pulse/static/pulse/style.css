@@ -296,6 +296,17 @@ form.htmx-request .choice__dot {
 
 .screen {
   min-height: 100vh;
+  /* Paired with min-height above, this pins .screen's used height at exactly 100vh (when
+     min-height and max-height are equal, an auto height has no room left to be anything
+     else) instead of letting it grow past the viewport the way it could before this fix --
+     see the big vw/vh comment below for how stacked content got tall enough to do that.
+     overflow:hidden then clips instead of scrolling the whole page. .results (below) is the
+     one part of this layout with genuinely unbounded content -- a variable, host-controlled
+     number of breakdown-group x option rows -- so it gets its own overflow-y:auto to absorb
+     any excess itself; the title and prompt line never shrink or scroll. 2026-09-07, fixing
+     the "used to fit, now scrolls on a normal monitor" regression from d82c8b0 below. */
+  max-height: 100vh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -314,17 +325,35 @@ form.htmx-request .choice__dot {
    capping it at a third of what the viewport actually had room for -- confirmed too small
    on a real 4K projector, 2026-09-01. Dropped the ceiling (`max(min, Nvw)`, i.e. clamp
    without its top clause) so this keeps growing with viewport width with no upper limit;
-   the min clause still protects small/host-preview windows. */
+   the min clause still protects small/host-preview windows.
+
+   2026-09-07: that fix had a blind spot -- vw alone has no idea how tall the viewport is,
+   and the old rem ceiling had *incidentally* also been capping how tall the whole stacked
+   column (word/question + pulse line + results panel, all centered by .screen's
+   justify-content:center) could get. Drop that ceiling and an entirely ordinary 1920x1080
+   monitor -- width generous, nothing special about it -- can end up asking for more total
+   height than 100vh once a handful of result rows stack up: reported as "used to fit, now
+   scrolls" on a normal display, not just as a projector edge case. Every rule below is now
+   `max(rem-floor, min(Nvw, Mvh))` -- bi-axial, bounded by whichever axis is tighter. Mvh is
+   picked so it's a no-op at a standard 16:9 aspect (Mvh == Nvw exactly when
+   width:height == 16:9, i.e. M = N * 16/9 ~= N * 1.78, then rounded) -- so a plain
+   1920x1080 or 1280x720 screen renders identically to before this change; only a viewport
+   that's shorter/squarer than 16:9 relative to its width (or just literally short, e.g. a
+   browser window with a lot of chrome eating into it) starts pulling sizes down. This is a
+   soft/cosmetic safety net, not the actual overflow fix -- for a plain 16:9 screen it does
+   nothing at all, by design -- .screen's max-height:100vh + overflow:hidden (above) and
+   .results' overflow-y:auto (below) are what actually guarantee the page itself never
+   scrolls, on any aspect ratio. */
 .screen-word {
   font-family: var(--font-display);
-  font-size: max(2.5rem, 6vw);
+  font-size: max(2.5rem, min(6vw, 10.7vh));
   font-weight: 650;
 }
 .screen-word span { color: var(--rose); }
 
 .screen-question {
   font-family: var(--font-display);
-  font-size: max(1.8rem, 4vw);
+  font-size: max(1.8rem, min(4vw, 7.1vh));
   font-weight: 650;
   max-width: 46rem;
   margin: 0;
@@ -334,15 +363,39 @@ form.htmx-request .choice__dot {
 
 .results {
   /* was min(56rem, 90vw) -- same ceiling problem as the font sizes above, capping the
-     whole results panel at 896px regardless of screen size. */
-  width: 90vw;
+     whole results panel at 896px regardless of screen size.
+
+     2026-09-07: given the same bi-axial min(Nvw, Mvh) treatment as the font-size rules
+     above, for consistency -- Mvh=160 (90 * 16/9) is a no-op at any screen 16:9 or wider
+     and only narrows the panel on a viewport unusually tall/narrow for its width. Width
+     isn't actually what caused the overflow bug this session is fixing (a narrower panel
+     can *increase* height by wrapping option labels onto more lines, if anything), so this
+     line alone doesn't do much; the real fix is the two properties below. */
+  width: min(90vw, 160vh);
   display: flex;
   flex-direction: column;
   gap: 1.6rem;
+  /* This is the one part of the layout with genuinely unbounded content -- a variable,
+     host-controlled number of breakdown-group x option rows -- so it's the one place that
+     needs to be able to actually give: min-height:0 overrides a flex item's default
+     automatic minimum size (roughly "never shrink below your own content"), which is what
+     was stopping this from shrinking at all when .screen's new max-height:100vh (above)
+     leaves it less room than it wants; overflow-y:auto then turns "shrunk smaller than its
+     content" into "scrolls its own content" instead of clipping it -- or, pre-fix, instead
+     of letting .screen grow past 100vh and scroll the whole page, title included.
+     Deliberately not flex-grow:1/`flex:1 1 auto` (the obvious "scrollable flex panel"
+     idiom): that would make .results always expand to consume whatever vertical space is
+     left over, which would pin the title to the top of the screen instead of today's
+     vertically-centered look (via .screen's justify-content:center) for the common case of
+     a short results list. Leaving flex-grow at its default 0 means .results only ever
+     shrinks -- and only once the column is already too tall for 100vh -- so the normal
+     case is untouched and only the pathological one (many groups x many options) scrolls. */
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .result-group__label {
-  font-size: max(0.85rem, 1.3vw);
+  font-size: max(0.85rem, min(1.3vw, 2.3vh));
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--mist);
@@ -360,7 +413,7 @@ form.htmx-request .choice__dot {
 
 .result-bar-track {
   flex: 1;
-  height: max(1.6rem, 2.2vw);
+  height: max(1.6rem, min(2.2vw, 3.9vh));
   background: var(--surface);
   border-radius: 999px;
   overflow: hidden;
@@ -383,7 +436,7 @@ form.htmx-request .choice__dot {
 .result-value {
   font-family: var(--font-display);
   font-weight: 650;
-  font-size: max(1.1rem, 2vw);
+  font-size: max(1.1rem, min(2vw, 3.6vh));
   color: var(--gold);
   min-width: 4.5ch;
   text-align: right;
@@ -393,7 +446,7 @@ form.htmx-request .choice__dot {
 .result-number {
   font-family: var(--font-display);
   font-weight: 650;
-  font-size: max(2.2rem, 6vw);
+  font-size: max(2.2rem, min(6vw, 10.7vh));
   color: var(--gold);
   font-variant-numeric: tabular-nums;
 }
