@@ -697,60 +697,84 @@ def screen_state(request):
     podium_rest = None
     podium_count = podium_question_font_size = None
     bouquet = None
+    asking_count = None
 
-    if state.revealed and state.question:
+    # style_is_compatible() only looks at state.question's type + state.breakdown, neither
+    # of which differs between "still asking" and "revealed" -- so this one check, hoisted
+    # above the revealed/not-revealed split below, covers both (added when the asking state
+    # grew its own Podium/Bouquet chrome -- see PLAN.md "Big-screen design exploration",
+    # "show the question itself styled ... before reveal"). It's necessary but not
+    # sufficient for the revealed branches below: PODIUM/BOUQUET can still be compatible in
+    # *shape* (right question type + breakdown) but have no actual data yet (nobody's
+    # answered), which those branches detect and downgrade to GENERIC themselves, same as
+    # before this change.
+    if state.question and style_is_compatible(state.style, state.question, state.breakdown):
+        effective_style = state.style
+
+    if effective_style == BigScreenState.Style.PODIUM:
+        # Same stepped, character-count heuristic Podium's reveal marquee has always used
+        # (fixed 1600px-wide plaque, not a responsive page -- see the function's own
+        # docstring) -- computed here, ahead of the revealed/not-revealed split, since the
+        # asking-state marquee (_podium_asking.html) needs the identical sizing and the
+        # question text doesn't change between asking and revealed.
+        podium_question_font_size = _podium_question_font_size(state.question.text_sv)
+
+    if state.question and not state.revealed:
+        # Bouquet's asking placeholder shows a live "N svar hittills" count while guests are
+        # still answering (see screen_styles/_bouquet_asking.html) -- Podium's asking state
+        # doesn't need one, but it's cheap enough to just always compute it here rather than
+        # branch on style first. Same underlying number as the revealed aggregations'
+        # agg["count"]/podium_count above, just flat (no breakdown grouping exists -- or
+        # matters -- before reveal).
+        asking_count = Response.objects.filter(question=state.question).count()
+
+    elif state.revealed and state.question:
         breakdown = compute_breakdown(state.question, state.breakdown, state.aggregation, state.aggregation_threshold)
 
-        if style_is_compatible(state.style, state.question, state.breakdown):
-            if state.style == BigScreenState.Style.PODIUM:
-                ranked = _rank_podium(breakdown)
-                if ranked:  # nobody's answered yet -> fall back to GENERIC's "Inga svar än."
-                    effective_style = state.style
-                    # Physical podium has exactly 3 slots (see screen_styles/_podium.html);
-                    # rank 4+ goes in a chip row below that lays out with plain flexbox, so
-                    # it takes any remaining count gracefully.
-                    top3, podium_rest = ranked[:3], ranked[3:]
-                    podium_rank1 = top3[0] if len(top3) > 0 else None
-                    podium_rank2 = top3[1] if len(top3) > 1 else None
-                    podium_rank3 = top3[2] if len(top3) > 2 else None
-                    podium_count = next(iter(breakdown.values()))["count"]
-                    podium_question_font_size = _podium_question_font_size(state.question.text_sv)
-            elif state.style == BigScreenState.Style.BOUQUET:
-                if state.breakdown == BigScreenState.Breakdown.OVERALL:
-                    group = next(iter(breakdown.values()))
-                    # Three diagram types, one per Question.Type -- see
-                    # _bouquet_geometry_boolean/_multiple_choice/_number's docstrings for why
-                    # each looks the way it does. Each branch's own "nobody's answered yet"
-                    # guard mirrors Podium's `if ranked:` above so an empty reveal falls back
-                    # to GENERIC's "Inga svar än." instead of rendering a broken/empty
-                    # botanical diagram.
-                    if state.question.type == Question.Type.BOOLEAN and group["yes_pct"] is not None:
-                        bouquet = _bouquet_geometry_boolean(group["yes_pct"], group["count"])
-                        effective_style = state.style
-                    elif state.question.type == Question.Type.MULTIPLE_CHOICE and group["options_pct"]:
-                        bouquet = _bouquet_geometry_multiple_choice(group["options_pct"], group["count"])
-                        effective_style = state.style
-                    elif state.question.type == Question.Type.NUMBER and group["value"] is not None:
-                        bouquet = _bouquet_geometry_number(group["value"], group["aggregation"], group["count"])
-                        effective_style = state.style
-                elif breakdown:  # nobody's answered yet -> fall back to GENERIC, same spirit as above
-                    # Their grouped ("Ribbon Rows") siblings -- one row per group instead of
-                    # one shared diagram -- see _bouquet_geometry_*_grouped's docstrings.
-                    # compute_breakdown() only ever includes a group that has at least one
-                    # response (aggregations._group), so every group here has count > 0; the
-                    # `elif breakdown:` guard above is only about the whole dict being empty
-                    # (literally nobody has answered this question yet).
-                    if state.question.type == Question.Type.BOOLEAN:
-                        bouquet = _bouquet_geometry_boolean_grouped(breakdown)
-                        effective_style = state.style
-                    elif state.question.type == Question.Type.MULTIPLE_CHOICE:
-                        bouquet = _bouquet_geometry_multiple_choice_grouped(breakdown)
-                        effective_style = state.style
-                    elif state.question.type == Question.Type.NUMBER:
-                        bouquet = _bouquet_geometry_number_grouped(breakdown)
-                        effective_style = state.style
-            else:
-                effective_style = state.style
+        if effective_style == BigScreenState.Style.PODIUM:
+            ranked = _rank_podium(breakdown)
+            if ranked:
+                # Physical podium has exactly 3 slots (see screen_styles/_podium.html);
+                # rank 4+ goes in a chip row below that lays out with plain flexbox, so
+                # it takes any remaining count gracefully.
+                top3, podium_rest = ranked[:3], ranked[3:]
+                podium_rank1 = top3[0] if len(top3) > 0 else None
+                podium_rank2 = top3[1] if len(top3) > 1 else None
+                podium_rank3 = top3[2] if len(top3) > 2 else None
+                podium_count = next(iter(breakdown.values()))["count"]
+            else:  # nobody's answered yet -> fall back to GENERIC's "Inga svar än."
+                effective_style = BigScreenState.Style.GENERIC
+        elif effective_style == BigScreenState.Style.BOUQUET:
+            if state.breakdown == BigScreenState.Breakdown.OVERALL:
+                group = next(iter(breakdown.values()))
+                # Three diagram types, one per Question.Type -- see
+                # _bouquet_geometry_boolean/_multiple_choice/_number's docstrings for why
+                # each looks the way it does. Each branch's own "nobody's answered yet"
+                # guard falls back to GENERIC's "Inga svar än." instead of rendering a
+                # broken/empty botanical diagram.
+                if state.question.type == Question.Type.BOOLEAN and group["yes_pct"] is not None:
+                    bouquet = _bouquet_geometry_boolean(group["yes_pct"], group["count"])
+                elif state.question.type == Question.Type.MULTIPLE_CHOICE and group["options_pct"]:
+                    bouquet = _bouquet_geometry_multiple_choice(group["options_pct"], group["count"])
+                elif state.question.type == Question.Type.NUMBER and group["value"] is not None:
+                    bouquet = _bouquet_geometry_number(group["value"], group["aggregation"], group["count"])
+                else:
+                    effective_style = BigScreenState.Style.GENERIC
+            elif breakdown:
+                # Their grouped ("Ribbon Rows") siblings -- one row per group instead of
+                # one shared diagram -- see _bouquet_geometry_*_grouped's docstrings.
+                # compute_breakdown() only ever includes a group that has at least one
+                # response (aggregations._group), so every group here has count > 0; the
+                # `elif breakdown:` guard above is only about the whole dict being empty
+                # (literally nobody has answered this question yet).
+                if state.question.type == Question.Type.BOOLEAN:
+                    bouquet = _bouquet_geometry_boolean_grouped(breakdown)
+                elif state.question.type == Question.Type.MULTIPLE_CHOICE:
+                    bouquet = _bouquet_geometry_multiple_choice_grouped(breakdown)
+                elif state.question.type == Question.Type.NUMBER:
+                    bouquet = _bouquet_geometry_number_grouped(breakdown)
+            else:  # nobody's answered yet -> fall back to GENERIC, same spirit as above
+                effective_style = BigScreenState.Style.GENERIC
 
     return render(
         request,
@@ -766,6 +790,7 @@ def screen_state(request):
             "podium_count": podium_count,
             "podium_question_font_size": podium_question_font_size,
             "bouquet": bouquet,
+            "asking_count": asking_count,
         },
     )
 

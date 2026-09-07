@@ -4,8 +4,29 @@
   {% include "pulse/_pulse_line.html" with animated=True %}
 
 {% elif not state.revealed %}
-  <h1 class="screen-question">{{ state.question.text_sv }}</h1>
-  {% include "pulse/_pulse_line.html" with animated=True %}
+  {% comment %}
+  Asking state -- guests are still answering. Dispatches on effective_style same as the
+  revealed branches below it (views.screen_state() computes effective_style the same way
+  for both: state.style downgraded to GENERIC whenever style_is_compatible() rejects the
+  question/breakdown combo, so there's no jarring identity-flip between what the asking
+  screen shows and what the reveal will look like) -- see PLAN.md "Big-screen design
+  exploration", "show the question itself styled in Podium/Bouquet, not just plain text,
+  before reveal". Falls back to today's plain heading + pulse line when incompatible.
+  {% endcomment %}
+  {% if effective_style == "podium" %}
+    <div id="style-canvas-viewport" class="style-podium"><div id="style-canvas">
+      {% include "pulse/screen_styles/_podium_asking.html" %}
+    </div></div>
+
+  {% elif effective_style == "bouquet" %}
+    <div id="style-canvas-viewport" class="style-bouquet"><div id="style-canvas">
+      {% include "pulse/screen_styles/_bouquet_asking.html" %}
+    </div></div>
+
+  {% else %}
+    <h1 class="screen-question">{{ state.question.text_sv }}</h1>
+    {% include "pulse/_pulse_line.html" with animated=True %}
+  {% endif %}
 
 {% elif effective_style == "podium" %}
   <div id="style-canvas-viewport" class="style-podium"><div id="style-canvas">

@@ -1,0 +1,62 @@
+{% comment %}
+Podium's *asking* state -- shown while the host has picked Podium and clicked "show" but
+not yet "reveal" (see _screen_state.html's `{% elif not state.revealed %}` branch and
+views.screen_state()'s effective_style computation). Only ever included when
+style_is_compatible() has already confirmed the live question is multiple_choice at
+breakdown=OVERALL -- same gate the revealed _podium.html relies on -- so this never has to
+handle an incompatible shape itself.
+
+All the pure-decoration stage layers below (curtain-left/curtain-right, beam-l/c/r,
+vignette, floor-glow, confetti flecks, spark SVGs) are copied verbatim from _podium.html --
+they're not data-driven, so there's nothing to genericize, just the same stage waiting for
+its winner. What's dropped: .winner-glow (only makes sense once someone's actually won),
+and every rank-data-driven bit of the reveal -- .col/.medal/.name-tag/.pct,
+.block/.rank-num, .also-label/.chip-row -- none of which have any pre-reveal equivalent.
+The marquee itself stays, with asking-appropriate copy instead of the reveal's "STORA
+AVSLÖJANDET" eyebrow and svar-count subline.
+{% endcomment %}
+<div class="style-podium">
+  <div class="stage">
+
+    <div class="curtain curtain-left"></div>
+    <div class="curtain curtain-right"></div>
+
+    <div class="beam beam-l"></div>
+    <div class="beam beam-c"></div>
+    <div class="beam beam-r"></div>
+
+    <div class="floor-glow"></div>
+
+    <div class="vignette"></div>
+
+    <!-- confetti flecks -- decorative, not data-driven -->
+    <div class="confetti" style="left:210px; top:300px; background:#f0c163; transform:rotate(18deg);"></div>
+    <div class="confetti" style="left:1660px; top:330px; background:#adb8c1; transform:rotate(-22deg);"></div>
+    <div class="confetti" style="left:150px; top:520px; background:#a4602f; transform:rotate(40deg);"></div>
+    <div class="confetti" style="left:1740px; top:520px; background:#d9a73b; transform:rotate(-12deg);"></div>
+    <div class="confetti" style="left:260px; top:700px; background:#7c2a52; transform:rotate(-30deg);"></div>
+    <div class="confetti" style="left:1620px; top:700px; background:#c99a2e; transform:rotate(24deg);"></div>
+    <div class="confetti" style="left:110px; top:850px; background:#adb8c1; transform:rotate(8deg);"></div>
+    <div class="confetti" style="left:1780px; top:840px; background:#a4602f; transform:rotate(-18deg);"></div>
+
+    <svg class="spark" style="left:770px; top:340px; animation-delay:0.2s;" width="26" height="26" viewBox="0 0 26 26" fill="none">
+      <path d="M13 0 L15.5 10.5 L26 13 L15.5 15.5 L13 26 L10.5 15.5 L0 13 L10.5 10.5 Z" fill="#f7d98a"></path>
+    </svg>
+    <svg class="spark" style="left:1130px; top:360px; animation-delay:1.1s;" width="20" height="20" viewBox="0 0 26 26" fill="none">
+      <path d="M13 0 L15.5 10.5 L26 13 L15.5 15.5 L13 26 L10.5 15.5 L0 13 L10.5 10.5 Z" fill="#f7d98a"></path>
+    </svg>
+    <svg class="spark" style="left:430px; top:600px; animation-delay:0.6s;" width="18" height="18" viewBox="0 0 26 26" fill="none">
+      <path d="M13 0 L15.5 10.5 L26 13 L15.5 15.5 L13 26 L10.5 15.5 L0 13 L10.5 10.5 Z" fill="#e4eaf0"></path>
+    </svg>
+
+    <!-- header marquee -->
+    <div class="marquee">
+      <div class="bulb-row top"></div>
+      <div class="eyebrow">FRÅGAN</div>
+      <div class="question" style="font-size:{{ podium_question_font_size }}px; white-space:normal;">{{ state.question.text_sv|upper }}</div>
+      <div class="subline">Svara i appen</div>
+      <div class="bulb-row bottom"></div>
+    </div>
+
+  </div>
+</div>

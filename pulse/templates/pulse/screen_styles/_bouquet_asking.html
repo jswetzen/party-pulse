@@ -1,0 +1,64 @@
+{% comment %}
+Bouquet's *asking* state -- shown while the host has picked Bouquet and clicked "show" but
+not yet "reveal" (see _screen_state.html's `{% elif not state.revealed %}` branch and
+views.screen_state()'s effective_style computation). Unlike the revealed _bouquet.html,
+there's no bouquet.kind dispatch here -- pre-reveal there's no per-Question.Type diagram to
+show (a boolean split, a fanned arrangement, a centerpiece stem all *imply* real answer
+data), so every question type gets the same generic placeholder: one bloom, waiting, plus a
+live count of how many guests have answered so far.
+
+Chrome is identical to _bouquet.html's: _bouquet_decor.html (paper grain/frame/corner
+sprigs + the shared #bq-blossom glyph, its own comment already documents it's meant for
+exactly this kind of reuse) and the header's small flower-rule divider, copied verbatim.
+Deliberately NOT reusing _bouquet_visual_number.html's stem+bloom unmodified -- its curved
+stem is a "this is a number" visual cue that would misrepresent a boolean/multiple_choice
+question waiting to be revealed (flagged by the investigation this template was built from)
+-- so the placeholder below is just the bare #bq-blossom glyph, centered, no stem.
+
+The live count sits as a caption directly under the placeholder bloom rather than in the
+footer (mirroring the reveal's footer placement was the other option -- see the feature's
+own plan notes) -- picked so there's exactly one place on the page presenting a real number,
+right where the eye already is. The footer below still reuses _bouquet_footer.html's
+rule+flourish SVG for the closing flourish, but not its own `.count` div (which hardcodes
+"{{ bouquet.count }}" -- doesn't exist here, and would just duplicate the caption above).
+{% endcomment %}
+<div class="style-bouquet">
+  <div class="stage">
+
+    {% include "pulse/screen_styles/_bouquet_decor.html" %}
+
+    <!-- top copy -->
+    <div class="eyebrow">Party Pulse &middot; Frågan</div>
+    <div class="headline">{{ state.question.text_sv }}</div>
+
+    <svg class="divider" viewBox="0 0 300 40">
+      <line x1="6" y1="20" x2="126" y2="20" stroke="#a9803f" stroke-width="1" opacity="0.55"></line>
+      <line x1="174" y1="20" x2="294" y2="20" stroke="#a9803f" stroke-width="1" opacity="0.55"></line>
+      <g transform="translate(150,26)">
+        <g stroke="#9c5a52" stroke-width="1" fill="#c98a83" fill-opacity="0.5">
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5"></ellipse>
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5" transform="rotate(72)"></ellipse>
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5" transform="rotate(144)"></ellipse>
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5" transform="rotate(216)"></ellipse>
+          <ellipse cx="0" cy="-9" rx="5.5" ry="9.5" transform="rotate(288)"></ellipse>
+        </g>
+        <circle r="3.4" fill="#c9a45f" stroke="#a9803f" stroke-width="0.7"></circle>
+      </g>
+    </svg>
+
+    <!-- central visual: type-agnostic placeholder -- just the shared blossom glyph, no
+         stem, no data shape implied one way or the other -->
+    <svg class="asking-bloom" width="220" height="220" viewBox="-24 -24 48 48">
+      <use href="#bq-blossom"></use>
+    </svg>
+    <div class="asking-count"><b>{{ asking_count }}</b> svar hittills</div>
+
+    <!-- bottom flourish only -- the count already showed above, under the bloom -->
+    <svg class="rule" viewBox="0 0 200 26">
+      <line x1="0" y1="13" x2="86" y2="13" stroke="#a9803f" stroke-width="1" opacity="0.5"></line>
+      <line x1="114" y1="13" x2="200" y2="13" stroke="#a9803f" stroke-width="1" opacity="0.5"></line>
+      <path d="M100,6 L104,13 L100,20 L96,13 Z" fill="#c9a45f" fill-opacity="0.7" stroke="#a9803f" stroke-width="0.8"></path>
+    </svg>
+
+  </div>
+</div>

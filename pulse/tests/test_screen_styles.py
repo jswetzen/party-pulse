@@ -645,6 +645,107 @@ def test_screen_state_falls_back_to_generic_when_grouped_bouquet_has_no_answers_
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# screen_state() -- the *asking* state (state.revealed == False), added alongside
+# _podium_asking.html/_bouquet_asking.html so the question itself shows in Podium/Bouquet's
+# own voice while guests are still answering, not just as plain text (see PLAN.md "Big-
+# screen design exploration", "show the question itself styled ... before reveal"). Same
+# style_is_compatible() gate as the revealed branches above -- these tests mirror the
+# existing revealed compatibility tests, just with revealed=False.
+# ---------------------------------------------------------------------------
+
+
+def test_screen_state_renders_podium_asking_for_a_compatible_multiple_choice_question(client):
+    question = make_mc_question(["Tårta", "Bakelse", "Glass"])
+    state = BigScreenState.load()
+    state.question, state.breakdown, state.style, state.revealed = question, "overall", "podium", False
+    state.save()
+
+    response = client.get("/screen/state/")
+
+    assert response.status_code == 200
+    assert response.context["effective_style"] == "podium"
+    assert b"style-podium" in response.content
+    assert "FRÅGAN".encode() in response.content
+    assert question.text_sv.upper().encode() in response.content
+    # No rank-data-driven markup should leak into the asking state.
+    assert b"medal" not in response.content
+    assert b"rank-num" not in response.content
+
+
+def test_screen_state_podium_asking_falls_back_to_generic_when_incompatible(client):
+    # Podium picked, but the live question is boolean -- same incompatibility
+    # style_is_compatible() already rejects for the revealed state (see
+    # test_screen_state_falls_back_to_generic_when_style_does_not_fit_question_type above).
+    question = make_boolean_question()
+    state = BigScreenState.load()
+    state.question, state.breakdown, state.style, state.revealed = question, "overall", "podium", False
+    state.save()
+
+    response = client.get("/screen/state/")
+
+    assert response.context["effective_style"] == "generic"
+    assert b"style-podium" not in response.content
+    assert b"screen-question" in response.content
+    assert question.text_sv.encode() in response.content
+
+
+def test_screen_state_renders_bouquet_asking_with_live_answer_count(client):
+    question = make_boolean_question()
+    for value in [True, False, True]:
+        Response.objects.create(respondent=make_respondent(), question=question, answer={"value": value})
+    state = BigScreenState.load()
+    state.question, state.breakdown, state.style, state.revealed = question, "overall", "bouquet", False
+    state.save()
+
+    response = client.get("/screen/state/")
+
+    assert response.status_code == 200
+    assert response.context["effective_style"] == "bouquet"
+    assert response.context["asking_count"] == 3
+    assert b"style-bouquet" in response.content
+    assert b"3</b> svar hittills" in response.content
+    # No boolean-specific reveal markup (the vine/track/marker) should leak in either.
+    assert b"track-wrap" not in response.content
+
+
+def test_screen_state_bouquet_asking_count_is_zero_before_anyone_answers(client):
+    question = make_mc_question(["A", "B"])
+    state = BigScreenState.load()
+    state.question, state.breakdown, state.style, state.revealed = question, "overall", "bouquet", False
+    state.save()
+
+    response = client.get("/screen/state/")
+
+    assert response.context["effective_style"] == "bouquet"
+    assert response.context["asking_count"] == 0
+    assert b"0</b> svar hittills" in response.content
+
+
+def test_screen_state_bouquet_asking_is_permissive_at_any_breakdown():
+    # Bouquet is as breakdown-permissive pre-reveal as it is post-reveal (see
+    # test_bouquet_fits_any_question_type_at_any_breakdown) -- the asking state doesn't
+    # render anything breakdown-specific, but the compatibility gate itself shouldn't reject
+    # a non-overall breakdown just because reveal hasn't happened yet.
+    question = make_mc_question(["A", "B"])
+    for breakdown in BigScreenState.Breakdown.values:
+        assert style_is_compatible(BigScreenState.Style.BOUQUET, question, breakdown)
+
+
+def test_screen_state_asking_count_is_none_when_revealed(client):
+    # asking_count is only meaningful pre-reveal -- confirms it doesn't leak into the
+    # revealed context (where podium_count/breakdown group counts are the real numbers).
+    question = make_mc_question(["A", "B"])
+    Response.objects.create(respondent=make_respondent(), question=question, answer={"value": "A"})
+    state = BigScreenState.load()
+    state.question, state.breakdown, state.style, state.revealed = question, "overall", "podium", True
+    state.save()
+
+    response = client.get("/screen/state/")
+
+    assert response.context["asking_count"] is None
+
+
 def test_screen_control_post_persists_style(client):
     User.objects.create_user("host", password="pw")
     client.login(username="host", password="pw")

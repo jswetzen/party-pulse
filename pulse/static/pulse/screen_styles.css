@@ -701,6 +701,42 @@
     }
 
 /* -------------------------------------------------------------------------
+   Bouquet -- asking state (_bouquet_asking.html), added when the asking screen grew its
+   own Podium/Bouquet chrome (see PLAN.md "show the question itself styled ... before
+   reveal"). Type-agnostic (no bouquet.kind to dispatch on pre-reveal) -- one centered
+   placeholder bloom plus a live-count caption directly underneath, positioned in the same
+   header-divider-to-footer-rule band as .number-visual above but simpler (no stem, no
+   value line, just the bloom and one line of copy).
+   ------------------------------------------------------------------------- */
+
+.style-bouquet .asking-bloom {
+      position: absolute;
+      top: 560px;
+      left: 960px;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 3px 6px rgba(60,47,34,0.22));
+    }
+
+.style-bouquet .asking-count {
+      position: absolute;
+      top: 700px;
+      left: 0;
+      width: 1920px;
+      text-align: center;
+      font-style: italic;
+      font-weight: 500;
+      font-size: 34px;
+      letter-spacing: 3px;
+      color: #5a4a3a;
+    }
+
+.style-bouquet .asking-count b {
+      font-weight: 600;
+      font-style: normal;
+      color: #3c2f22;
+    }
+
+/* -------------------------------------------------------------------------
    Bouquet -- "Ribbon Rows" grouped diagram types, added 2026-09-06 for every breakdown
    other than OVERALL (see views._bouquet_geometry_*_grouped, docs/screen-styles.md's
    session summary of that date). All three share the left-hand ".??-gname/.??-gcount"
