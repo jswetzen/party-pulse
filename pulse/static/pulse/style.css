@@ -355,11 +355,24 @@ form.htmx-request .choice__dot {
   font-family: var(--font-display);
   font-size: max(1.8rem, min(4vw, 7.1vh));
   font-weight: 650;
-  max-width: 46rem;
+  /* Was a flat 46rem -- narrower than .results' own width budget just below (`min(90vw,
+     160vh)`), so a long question wrapped to three lines on a wide screen while the
+     breakdown data underneath it had plenty of room to spare. Match .results' budget
+     exactly instead of an arbitrary rem cap, so the header uses the same real estate the
+     panel below it already does and wraps only when the panel itself would too. 2026-09-08. */
+  max-width: min(90vw, 160vh);
   margin: 0;
 }
 
 .screen .pulse-line { max-width: 48rem; }
+
+/* Results-view pulse-line only (see _pulse_line.html's `compact` param, used solely at
+   that include site) -- the idle/thinking and asking states get the full-size waveform
+   since it's the only thing on screen there, but once real breakdown data is showing
+   underneath it, a 2.5rem-tall decorative flourish is competing with that data for
+   vertical space. Shrink it there specifically rather than everywhere. 2026-09-08. */
+.pulse-line--compact.pulse-line { max-width: 22rem; }
+.pulse-line--compact .pulse-line__svg { height: 1.1rem; }
 
 .results {
   /* was min(56rem, 90vw) -- same ceiling problem as the font sizes above, capping the

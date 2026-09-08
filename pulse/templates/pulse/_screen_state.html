@@ -40,7 +40,7 @@
 
 {% else %}
   <h1 class="screen-question" style="font-size:max(1.4rem,min(2.6vw,4.6vh))">{{ state.question.text_sv }}</h1>
-  {% include "pulse/_pulse_line.html" %}
+  {% include "pulse/_pulse_line.html" with compact=True %}
 
   <div class="results">
     {% for group_label, agg in breakdown.items %}
