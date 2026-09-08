@@ -238,8 +238,8 @@ def test_bouquet_geometry_boolean_grouped_places_each_row_and_seam_from_its_own_
     man, kvinna = geo["rows"]
     assert man["label"] == "Man" and man["yes_pct"] == 60.0 and man["nej_pct"] == 40.0
     assert man["row_top"] == 414 and man["row_center"] == 524
-    assert man["seam_x"] == 1316  # track_left(620) + track_width(1160) * 60%
-    assert man["ja_seg_width"] == 696 and man["nej_seg_width"] == 464
+    assert man["seam_x"] == 1244  # track_left(440) + track_width(1340) * 60%
+    assert man["ja_seg_width"] == 804 and man["nej_seg_width"] == 536
     assert man["winner"] == "ja"  # yes_pct > 50
 
     # row_center == 743, not the naive 742 midpoint -- 633 + 219/2 == 742.5 lands exactly on
@@ -247,7 +247,7 @@ def test_bouquet_geometry_boolean_grouped_places_each_row_and_seam_from_its_own_
     # so consecutive rows' row_center values stay a uniform row_height apart -- see that
     # helper's own docstring, and this file's row-to-row spacing regression test below.
     assert kvinna["row_top"] == 633 and kvinna["row_center"] == 743
-    assert kvinna["seam_x"] == 910  # 620 + 1160 * 25%
+    assert kvinna["seam_x"] == 775  # 440 + 1340 * 25%
     assert kvinna["winner"] == "nej"  # yes_pct < 50
 
 
@@ -839,7 +839,8 @@ def test_screen_control_post_persists_style(client):
 # `text-align: center` from the ambient `.screen` page wrapper (style.css) -- every other bit
 # of Bouquet text either has no explicit width (so text-align can't visibly shift it) or sets
 # its own text-align, so this one slipped through. The visible effect was the group name/count
-# text centering inside its 420px column instead of hugging track_left's counterpart margin
+# text centering inside its column (420px wide at the time, 260 since the horizontal-spacing
+# fix below) instead of hugging track_left's counterpart margin
 # on the row's other side -- read as "extra empty space on the left, too little on the right"
 # even though the underlying pixel geometry (label_left vs. canvas_width - track_right) was
 # already symmetric. A geometry-only test can't see this (the bug is pure CSS inheritance),
@@ -856,3 +857,102 @@ def test_screen_styles_css_grouped_label_column_is_left_aligned_not_inherited_ce
         f".{label_class} must set text-align:left explicitly -- without it, .screen's "
         "ambient text-align:center (style.css) silently re-centers this column's text"
     )
+
+
+# ---------------------------------------------------------------------------
+# Horizontal layout of the Ribbon Rows band. Guards the fix for the follow-on bug found
+# 2026-09-08 (after the vertical row-spacing and label-alignment fixes of the same date, see
+# docs/screen-styles.md): the left-hand label column reserved 420px, plus a 60px gutter, for
+# group names that render 46-156px wide in every real breakdown -- so every row had a ~394px
+# void between the group name and the start of its own data, and the data band's centre sat
+# 240px right of the stage's own symmetry axis (x=960, which the headline, subline, divider
+# and footer count are all centred on). Both numbers were hardcoded and unrelated to
+# anything the column actually holds, which is exactly why nothing caught it.
+#
+# The measured worst case the column must still hold on one line is "Brudgummens sida" (the
+# longest of Respondent.Sex/Side/Relation's display labels and age_bucket_label()'s six
+# buckets) at _bouquet_grouped_label_font_sizes()'s 32px cap: 217.5px in this style's real
+# face, measured in headless Chromium against the running app. Below that the name wraps to
+# a second line and collides with the next row; too far above it and the name is stranded
+# from its own row again, so both ends are asserted.
+# ---------------------------------------------------------------------------
+
+_WIDEST_GROUP_NAME_PX = 218
+# How much of the label zone (column + gutter) may exceed that worst-case name. The buggy
+# layout spent 480 - 218 = 262px here; the RibbonRows/Generalization mockups this layout
+# came from spent 300 - 218 = 82px, which is what the fix restores.
+_LABEL_ZONE_SLACK_BUDGET = 100
+
+
+def _grouped_geometries():
+    """One geometry dict per grouped kind, all from the same 3-group breakdown shape, so the
+    shared left-hand column/band can be compared across kinds."""
+    return {
+        "boolean_grouped": _bouquet_geometry_boolean_grouped(
+            {
+                "Brudens sida": {"count": 20, "yes_pct": 60.0},
+                "Brudgummens sida": {"count": 25, "yes_pct": 40.0},
+                "Bådas sida": {"count": 15, "yes_pct": 50.0},
+            }
+        ),
+        "multiple_choice_grouped": _bouquet_geometry_multiple_choice_grouped(
+            {
+                "Brudens sida": {"count": 20, "options_pct": {"A": 60.0, "B": 40.0}},
+                "Brudgummens sida": {"count": 25, "options_pct": {"A": 30.0, "B": 70.0}},
+                "Bådas sida": {"count": 15, "options_pct": {"A": 50.0, "B": 50.0}},
+            }
+        ),
+        "number_grouped": _bouquet_geometry_number_grouped(
+            {
+                "Brudens sida": {"count": 20, "value": 42.5, "aggregation": "avg"},
+                "Brudgummens sida": {"count": 25, "value": 41.4, "aggregation": "avg"},
+                "Bådas sida": {"count": 15, "value": 31.7, "aggregation": "avg"},
+            }
+        ),
+    }
+
+
+def test_bouquet_grouped_label_column_is_identical_across_all_three_kinds():
+    # The whole point of defining the column once in views.py: a host flipping question type
+    # at the same breakdown must see the group names stay exactly where they were.
+    columns = {kind: (geo["label_left"], geo["label_width"]) for kind, geo in _grouped_geometries().items()}
+    assert len(set(columns.values())) == 1, f"grouped label columns disagree: {columns}"
+
+
+def test_bouquet_grouped_label_zone_holds_the_widest_group_name_without_stranding_it():
+    for kind, geo in _grouped_geometries().items():
+        if kind == "number_grouped":
+            continue  # its row is a fixed-width cluster, not a band -- see _BOUQUET_NG_FLOWER_LEFT
+        label_zone = geo["track_left"] - geo["label_left"]  # column + the gutter after it
+        assert geo["label_width"] >= _WIDEST_GROUP_NAME_PX, (
+            f"{kind}: label column ({geo['label_width']}px) is narrower than the widest group "
+            f"name this app can render ({_WIDEST_GROUP_NAME_PX}px) -- it would wrap to a "
+            "second line and collide with the next row"
+        )
+        assert label_zone - _WIDEST_GROUP_NAME_PX <= _LABEL_ZONE_SLACK_BUDGET, (
+            f"{kind}: label zone reserves {label_zone}px for text that is at most "
+            f"{_WIDEST_GROUP_NAME_PX}px wide -- the surplus becomes a void between every "
+            "group name and its own row, and pushes the data band off the stage's axis"
+        )
+
+
+def test_bouquet_grouped_band_margins_are_symmetric_on_the_stage():
+    canvas_width = 1920  # screen_display.html's fixed #style-canvas
+    for kind, geo in _grouped_geometries().items():
+        if kind == "number_grouped":
+            continue  # see above -- nothing spans the band, so there is no right margin to match
+        right_margin = canvas_width - (geo["track_left"] + geo["track_width"])
+        assert right_margin == geo["label_left"], (
+            f"{kind}: band ends {right_margin}px from the stage's right edge but the label "
+            f"column starts {geo['label_left']}px from its left -- the row is off-centre"
+        )
+
+
+def test_bouquet_grouped_number_cluster_does_not_move_with_the_band():
+    # number_grouped's row is a small fixed-width cluster (flower/value/tag), deliberately
+    # decoupled from the band the other two kinds fill edge to edge: dragging it left with
+    # the band would only trade its right-hand void for a bigger one. Pinned so a future
+    # band change doesn't silently move it -- see _BOUQUET_NG_FLOWER_LEFT's own comment.
+    geo = _grouped_geometries()["number_grouped"]
+    assert geo["flower_left"] == 620
+    assert geo["value_left"] == 750 and geo["tag_left"] == 1070

@@ -253,6 +253,12 @@ def _podium_question_font_size(text: str) -> int:
     return 36
 
 
+# Every Bouquet coordinate below is a pixel inside the fixed 1920x1080 stage
+# (screen_display.html's #style-canvas, scaled to whatever's actually plugged in) -- named
+# here so the layouts that want to be symmetric about the stage can say so in terms of the
+# stage's own width instead of repeating 1920 as a bare number.
+_BOUQUET_CANVAS_WIDTH = 1920
+
 # Bouquet's ja/nej "vine" track spans this fixed box inside the 1920x1080 stage (see
 # screen_styles/_bouquet.html); _bouquet_geometry_boolean() below places every element in it from
 # the real yes_pct, where the original mockup had these hand-placed for one specific
@@ -411,7 +417,10 @@ def _bouquet_geometry_number(value: float, aggregation: str | None, count: int) 
 #
 # All three share the same vertical row band and left-hand group-label column -- defined
 # once here rather than per-kind -- so switching which question type is revealed at, say,
-# breakdown=age always plants its rows in the same place on the stage.
+# breakdown=age always plants its rows in the same place on the stage. The horizontal *data*
+# region is shared by the two kinds that actually fill it edge to edge (boolean's track,
+# multiple_choice's stem); number_grouped's row is a small fixed-width cluster instead and
+# keeps its own left edge -- see _BOUQUET_NG_FLOWER_LEFT.
 # ---------------------------------------------------------------------------
 
 # The header above (eyebrow/headline/divider, see _bouquet.html) and the footer below
@@ -424,14 +433,47 @@ _BOUQUET_GROUPED_ROWS_TOP = 414
 _BOUQUET_GROUPED_ROWS_BOTTOM = 852
 # Left-hand "group name / N svar" column, shared by all three kinds so a host flipping
 # between question types at the same breakdown sees the group labels stay put.
+#
+# LABEL_WIDTH is what the column *reserves*, and it has to be justified by what the column
+# can ever actually hold, because the group name is left-aligned inside it (see .bg-label's
+# `text-align: left` in screen_styles.css) -- every pixel of reserved-but-unused width turns
+# into a void between the group name and its own data, not into padding around the text.
+# The set of group names is closed and known (Respondent.Sex/Side/Relation's own display
+# labels plus models.age_bucket_label()'s six buckets), and the biggest font this column
+# ever uses is _bouquet_grouped_label_font_sizes()'s own 32px cap, so the worst case is
+# exactly measurable rather than a guess: "Brudgummens sida" at 32px renders 217.5px wide in
+# this style's real face (measured in headless Chromium against the running app, 2026-09-08;
+# every other name at every other size this app can produce is narrower -- the widest at the
+# 20px floor, i.e. the 6-group Åldersgrupp case, is 136px). 260 clears that worst case by
+# ~42px, so the name can never wrap to a second line (which would collide with the next row
+# vertically) and never crowds the gap below.
 _BOUQUET_GROUPED_LABEL_LEFT = 140
-_BOUQUET_GROUPED_LABEL_WIDTH = 420
-# Horizontal region the data itself lives in (the ja/nej track for boolean, the strung-bloom
-# stem for multiple_choice, the flower+value for number) -- starts right after the label
-# column, ends comfortably inside the hairline stationery frame (frame's own inner edge is
-# at x=1866, see _bouquet_decor.html's .frame-rect).
-_BOUQUET_GROUPED_TRACK_LEFT = 620
-_BOUQUET_GROUPED_TRACK_WIDTH = 1160
+_BOUQUET_GROUPED_LABEL_WIDTH = 260
+# Gutter between the label column and the data band. Explicit rather than implied by the
+# difference between two absolute constants, so "how far is the group name from its own
+# row" is a number someone can read and change.
+_BOUQUET_GROUPED_LABEL_GAP = 40
+# Horizontal region the data itself lives in (the ja/nej track for boolean and the
+# strung-bloom stem for multiple_choice; number_grouped has its own cluster, see
+# _BOUQUET_NG_FLOWER_LEFT below). Derived from the label column rather than hardcoded, and
+# the width derived so the band's right margin is the label column's own left margin by
+# construction (140 either side) -- the previous hardcoded pair (620/1160) happened to
+# satisfy that too, but only by coincidence, and nothing said so.
+#
+# Both numbers changed 2026-09-08 (label column 420 -> 260, band 620/1160 -> 440/1340) to
+# fix a real horizontal-spacing bug found by measuring the running app: the label zone
+# (column + gutter) reserved 480px for text that renders 46-156px wide in every real
+# breakdown, so every row had a ~394px void between the group name and the start of its own
+# track, and the data band's centre sat at x=1200 -- 240px right of x=960, the axis the
+# headline, the "uppdelat efter ..." subline, the divider and the footer count are all
+# centred on (headline ink measured 372.6..1547.4, centre 960.0). The whole diagram read as
+# pushed right with a hole under the headline. 260+40 restores the label zone to the 300px
+# the RibbonRows/Generalization mockups this layout came from actually specified
+# (`.bool-label { width: 300px }` there, with the track starting immediately after it) --
+# the implementation had drifted to 480px without that being a decision anyone made. See
+# docs/screen-styles.md's session summary of this date for the full measured before/after.
+_BOUQUET_GROUPED_TRACK_LEFT = _BOUQUET_GROUPED_LABEL_LEFT + _BOUQUET_GROUPED_LABEL_WIDTH + _BOUQUET_GROUPED_LABEL_GAP
+_BOUQUET_GROUPED_TRACK_WIDTH = _BOUQUET_CANVAS_WIDTH - _BOUQUET_GROUPED_LABEL_LEFT - _BOUQUET_GROUPED_TRACK_LEFT
 
 # boolean_grouped's pct labels sit above the ja/nej track rather than sharing its own
 # vertical center (see _bouquet_geometry_boolean_grouped's docstring) -- half of .bg-track's
@@ -581,6 +623,19 @@ def _bouquet_geometry_boolean_grouped(breakdown: dict) -> dict:
         "flower_size": flower_size,
     }
 
+
+# number_grouped's row content is a fixed-width cluster (flower, the one value, the
+# aggregation tag), not a band-spanning track/stem like the other two kinds -- so it is
+# deliberately NOT tied to _BOUQUET_GROUPED_TRACK_LEFT, and keeps the exact absolute
+# position it was tuned and visually verified at on 2026-09-06. Narrowing the label zone
+# (see that constant's own comment) moves the *band* left, which is right for a track that
+# fills it; dragging this cluster along with it would only trade the void it currently
+# leaves on its right for a bigger one, since the cluster's own width doesn't grow to
+# match. number_grouped's own horizontal balance (at 6 groups the cluster measures
+# x=600..1131 and then nothing until the frame at 1854) is a separate, unreported design
+# question -- see docs/screen-styles.md's session summary of 2026-09-08 -- deliberately not
+# changed here rather than redesigned as a side effect of someone else's bug fix.
+_BOUQUET_NG_FLOWER_LEFT = 620
 
 # Vertical clearance (px) kept between a bloom's own edge and the label text next to it.
 _BOUQUET_MCG_GAP = 5
@@ -742,13 +797,13 @@ def _bouquet_geometry_number_grouped(breakdown: dict) -> dict:
         "rows": rows,
         "label_left": _BOUQUET_GROUPED_LABEL_LEFT,
         "label_width": _BOUQUET_GROUPED_LABEL_WIDTH,
-        "flower_left": _BOUQUET_GROUPED_TRACK_LEFT,
+        "flower_left": _BOUQUET_NG_FLOWER_LEFT,
         # Fixed offsets past the flower/value, generous enough for this style's biggest
         # possible flower (see flower_size's own clamp above) and a 3-digit-plus-decimal
         # value at this style's biggest possible value_font_size, so they never collide
         # regardless of which group count/aggregation actually rendered.
-        "value_left": _BOUQUET_GROUPED_TRACK_LEFT + 130,
-        "tag_left": _BOUQUET_GROUPED_TRACK_LEFT + 130 + 320,
+        "value_left": _BOUQUET_NG_FLOWER_LEFT + 130,
+        "tag_left": _BOUQUET_NG_FLOWER_LEFT + 130 + 320,
         "name_font_size": name_font,
         "count_font_size": count_font,
         "flower_size": flower_size,

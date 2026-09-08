@@ -517,6 +517,115 @@ and equal to the true 73px row height, which the row_top-only regression test fr
 session above didn't and couldn't catch since `row_top` itself was never affected — only the
 downstream `row_center` add-half-then-round step was).
 
+## Session summary (2026-09-08, follow-up 2: Ribbon Rows horizontal spacing)
+
+Reported from Johan looking at the same live boolean_grouped Åldersgrupp reveal as the two
+sessions above (137 svar): vertical row-to-row spacing now reads fine, but "something about
+the horizontal spacing is still off" — explicitly a third, separate bug from the
+number/track overlap, the label `text-align`, and the row-spacing rounding parity, and not
+precisely diagnosed when the work started. Measured first, guessed at never: headless
+Chromium (puppeteer-core over a `nix-shell -p chromium` binary) against the real running
+container, pulling `getBoundingClientRect()` for the track, seam flower, both pct labels and
+the group-name/count text ink of all six rows, plus a per-column ink-coverage scan of the
+rendered PNG.
+
+**Three of the four suspected mechanisms were disproved with hard numbers first**, which
+matters because the obvious suspects were all "rendered pixels don't match what Python
+intended" — and none of them were:
+
+- The seam flower is *exactly* centred on its own `seam_x` in every row (measured
+  `seam.cx` = 1512/1656/1475/1643/1475/1200 against `seam_x` = the same six values;
+  `transform: translate(-50%,-50%)` derives the centring from the SVG's own `width`/`height`,
+  so it self-corrects at any `flower_size`, and `#bq-blossom`'s petals are mirror-symmetric
+  about x=0 so the ink is centred too). Not a fixed-offset-vs-dynamic-size bug.
+- Both pct labels sit at exactly `seam_x ± label_gap` (measured gap 26px on both sides in all
+  six rows, `translate(-100%,·)` / `translate(0,·)` anchoring their near edges) — symmetric.
+- `seam_x` itself matches `track_left + track_width × ja_pct` to the pixel at every real
+  ja_pct from 50,0% to 89,3%.
+- The rendered `label_left`/`label_width`/`track_left`/`track_width` matched their Python
+  values exactly (140/420/620/1160).
+
+**The real bug was that those Python values were wrong**, not that the CSS mispositioned
+them: the left-hand label column reserved 420px, plus a 60px gutter before the data band, for
+group-name text that renders **46–156px** wide in *every* real breakdown (measured: the
+widest name in the app, "Brudgummens sida", is 156px at its own 3-group font size; the
+6-group Åldersgrupp names are 46–86px). So every row carried a **393px void** between the
+group name and the start of its own track (measured as one continuous run of zero ink from
+x=226 to x=618 in the rendered PNG), and the data band's centre sat at x=1200 — **240px right
+of x=960**, the axis the headline (ink measured 372.6..1547.4, centre 960.0), the "uppdelat
+efter …" subline, the divider and the footer count are all centred on. That reads exactly as
+what was reported: the diagram pushed right, a hole under the headline. The a506c73
+`text-align: left` fix was correct and is untouched, but it *enlarged* this particular void
+(from ~240px to ~394px) by moving the name from the middle of its column to the left edge,
+which is why the complaint survived it.
+
+Both numbers were hardcoded and unrelated to anything the column actually holds — and 480px
+is not what the layout was designed to spend: the RibbonRows/Generalization mockups this
+whole layout came from specify `.bool-label { width: 300px }` with the track starting
+immediately after it. The implementation had drifted to 480px without that being a decision
+anyone made.
+
+Fixed in `views.py` by making the band derive from the label column instead of being three
+independent magic numbers: `_BOUQUET_GROUPED_LABEL_WIDTH` 420 → 260 (the measured worst case
+this column must hold on one line is "Brudgummens sida" at
+`_bouquet_grouped_label_font_sizes`' 32px cap = 217.5px, so 260 clears it by ~42px and the
+name can still never wrap into the next row), a new explicit
+`_BOUQUET_GROUPED_LABEL_GAP = 40` (total label zone 300px, the mockup's own number), and
+`_BOUQUET_GROUPED_TRACK_LEFT`/`_TRACK_WIDTH` computed from those (440/1340) so the band's
+right margin equals the label column's left margin *by construction* rather than by the old
+pair's coincidence.
+
+`number_grouped` is deliberately excluded: its row is a small fixed-width cluster
+(flower/value/tag), not a band-spanning track, so it keeps its own `_BOUQUET_NG_FLOWER_LEFT`
+(620) and renders **pixel-identical** to before (measured: bloom 600..640, value at 750, tag
+at 1070, unchanged). Dragging it left with the band would only have traded the void on its
+right for a bigger one. Its own horizontal balance (cluster ends at x=1131, then nothing
+until the frame at 1854, and the "MEDEL" tag sitting ~270px from the number it labels,
+because those offsets are worst-case-sized and don't scale down with the row's real
+flower/value sizes) is a real but *separate*, unreported design question — noted here rather
+than redesigned as a side effect of someone else's bug fix.
+
+Measured before/after on the real rebuilt container, 1920x1080, headless Chromium:
+
+| | before | after |
+|---|---|---|
+| label zone (column + gutter) | 480px for ≤156px of text | 300px |
+| largest void inside a row | 393px (x=226..618) | 213px (x=226..438) |
+| data band | 620..1780, centre 1200 | 440..1780, centre 1110 |
+| rows-band ink centroid | x=1219.8 | x=1138.0 (stage axis 960) |
+| track/seam/label vertical | `cy` 451/524/597/670/743/816 | unchanged, still a uniform 73px stride |
+
+Verified across group counts, all against the real container and real data: boolean_grouped
+at Åldersgrupp (6), Sida (3 — the "Brudgummens sida" longest-label case, confirmed still one
+line: label box height 45.18px at width 260, identical to its height at 420) and Kön (2);
+multiple_choice_grouped at both 6 and 2 groups; number_grouped at 6 and 3 groups
+(pixel-identical, as intended); plus a breakdown=Alla boolean reveal to confirm the
+single-group diagrams (which use the separate `_BOUQUET_TRACK_LEFT`/`_WIDTH` pair) are
+untouched. 130 tests pass (126 + 4 new: the label column being identical across all three
+grouped kinds, the label zone holding the widest possible group name without stranding it,
+the band's margins being symmetric on the stage, and number_grouped's cluster *not* moving
+with the band; the label-zone one was confirmed to actually fail against the old 420/60
+constants before being kept).
+
+**A real side effect worth recording, since it wasn't the assignment**: widening the band
+also widens `multiple_choice_grouped`'s per-option slots (1160/m → 1340/m), which measurably
+reduces that diagram's own, *separate* label-collision bug — its option labels are
+`white-space: nowrap`, centred on their bloom, and simply wider than a slot when the option
+text is long. At Åldersgrupp (6 groups) the one overlapping pair (13.7px) is now **gone**; at
+Kön (2 groups) five overlapping pairs of up to **61.2px** are down to one pair at 25.2px.
+Still not fixed, and it can't be fixed by widening alone — "Något bubbligt och alkoholfritt
+27,0%" is ~265px of nowrap text against a ~268px slot, and shrinking the font enough to fit
+would drop below this project's own legibility floor. That needs its own decision
+(truncation, shorter option labels, or dropping the non-winner labels at small group counts)
+and is listed under "Possible next steps" below rather than half-fixed here.
+
+**Not verified**: the same latent edge the geometry has always had — at a group with ja_pct
+≥ ~96% or ≤ ~4% the outer pct label would run past the track's end (into the stationery
+frame) or back into the label gutter, since `seam_x ± label_gap` is not clamped to the band.
+The real data across all 182 (boolean question × breakdown × group) cells currently spans
+9,1%–89,3%, so nothing in the app hits it today; left alone deliberately rather than adding
+an unmeasured text-width fudge factor to a fix that isn't about it.
+
 ## Possible next steps
 
 Roughly in order of how self-contained each one is — none of this is started.
@@ -534,6 +643,16 @@ Roughly in order of how self-contained each one is — none of this is started.
    per-group breakdowns for all three diagram types, "Ribbon Rows" — shipped 2026-09-06, see
    that session summary above; this Podium extension is the one still-open piece of the
    original two-item follow-up.)
+2a. **multiple_choice_grouped's option labels still collide horizontally at small group
+   counts.** Each label is `white-space: nowrap` and centred on its own bloom, so a long
+   option ("Något bubbligt och alkoholfritt 27,0%" ≈ 265px) simply doesn't fit its slot
+   (band width / option count ≈ 268px at 5 options). Measured 2026-09-08 after the band
+   widened: gone at 6 groups, one remaining pair overlapping 25,2px at 2 groups (it was five
+   pairs, up to 61,2px, before). Not fixable by widening further, and shrinking the font to
+   fit would break this project's legibility floor — so it needs a real decision:
+   truncate with an ellipsis, shorten the option texts themselves in the question bank, or
+   show only the winner's label at small group counts. Deliberately left open rather than
+   half-fixed; see the 2026-09-08 follow-up-2 session summary for the numbers.
 2b. **A tie-arc connector for multiple_choice_grouped**, matching the RibbonRows mockup's
    "DELAD 1:A" flourish when two blooms tie for first in a row — currently both tied blooms
    just get the prominent label independently (see the 2026-09-06 session summary's
