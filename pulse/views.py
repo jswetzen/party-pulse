@@ -433,6 +433,25 @@ _BOUQUET_GROUPED_LABEL_WIDTH = 420
 _BOUQUET_GROUPED_TRACK_LEFT = 620
 _BOUQUET_GROUPED_TRACK_WIDTH = 1160
 
+# boolean_grouped's pct labels sit above the ja/nej track rather than sharing its own
+# vertical center (see _bouquet_geometry_boolean_grouped's docstring) -- half of .bg-track's
+# own fixed CSS height (7px), plus a fixed clearance above that, plus one line of text at
+# whatever pct_font comes out to, must all fit inside half a row or the label collides with
+# the track (small group counts) or the row above it (large group counts, e.g. Åldersgrupp's
+# 6). Line-height matches the multiple_choice_grouped constant below -- same "a CSS line's
+# rendered height in px per 1px of font-size" reasoning, this diagram type just didn't need
+# the number until now.
+_BOUQUET_BG_TRACK_HALF_HEIGHT = 3.5
+_BOUQUET_BG_PCT_CLEARANCE = 6
+_BOUQUET_BG_LINE_HEIGHT = 1.2
+# row_top/row_center/pct_top are each independently rounded to whole pixels (this file's own
+# "precomputed pixel, not template arithmetic" convention), which can each lose up to ~0.5px
+# in the direction that shrinks the gap this budget is trying to guarantee -- this slack
+# absorbs that compounding rounding error so the *exact* (pre-rounding) margin computed below
+# survives being rounded, rather than the budget being exactly zero and rounding tipping it
+# negative (found via the parametrized regression test at n=6, this app's tightest real case).
+_BOUQUET_BG_ROUNDING_SLACK = 2
+
 
 def _bouquet_grouped_label_font_sizes(row_height: float) -> tuple[int, int]:
     """(group-name font size, "N svar" font size) for the shared left-hand label column --
@@ -454,18 +473,35 @@ def _bouquet_geometry_boolean_grouped(breakdown: dict) -> dict:
     colored to whichever side actually won that group (see .bg-seam-nej's hue-rotate filter
     in screen_styles.css -- reusing #bq-blossom's shape, not redefining it, per
     _bouquet_decor.html's own rule). Caller (screen_state()) guards the "nobody's answered
-    yet" case; every group in `breakdown` is guaranteed count > 0 (see aggregations._group)."""
+    yet" case; every group in `breakdown` is guaranteed count > 0 (see aggregations._group).
+
+    The two pct labels are lifted clear of the track line itself (`pct_top`, anchored by
+    its own bottom edge via the template's `translateY(-100%)`) rather than sharing the
+    track's own vertical center -- an earlier version put both on the exact same centerline
+    as the 7px track, which put the track visibly through the middle of the digits (found by
+    screenshotting the real 6-group Åldersgrupp breakdown, not visible from the geometry
+    numbers alone -- see docs/screen-styles.md's session summary for the date this was
+    fixed). `pct_font` is therefore also clamped by how much vertical room is actually free
+    above the track in half a row, the same "legibility floor first, shrink to fit if the
+    floor doesn't clear" pattern multiple_choice_grouped's `bloom_max` already uses below --
+    at 6 rows the floor barely clears with the fixed clearance chosen here; a hard-coded
+    offset that ignored this would silently start re-overlapping at a 7th group count this
+    app doesn't have yet but shouldn't need re-deriving by hand if it ever does."""
     items = list(breakdown.items())
     n = len(items)
     row_height = (_BOUQUET_GROUPED_ROWS_BOTTOM - _BOUQUET_GROUPED_ROWS_TOP) / n
     name_font, count_font = _bouquet_grouped_label_font_sizes(row_height)
-    # Unlike multiple_choice_grouped, nothing here stacks vertically within a row (the
-    # flower and both pct labels all sit on the same horizontal line, vertically centered
-    # -- see the template's `translateY(-50%)`), so even 5 rows leave far more headroom than
-    # a single ~30px line needs; these floors are picked for legibility (this project's own
-    # "secondary numbers never below ~26px" standard), not because a tighter fit was forced
-    # by the row height the way multiple_choice_grouped's bloom_max is.
+    half_row = row_height / 2
+    # Legibility floor/ceiling first (same starting point as before), then clamped down if
+    # half a row doesn't actually have room for the track's own half-height, the fixed
+    # clearance above it, and one line of text at that size -- see docstring above. floor()
+    # (not round()) on the space budget so the clamp always rounds towards "definitely still
+    # fits", never towards "fits on paper, doesn't after pixel-rounding".
     pct_font = round(min(34, max(22, row_height * 0.20)))
+    max_pct_font_by_space = (
+        half_row - _BOUQUET_BG_TRACK_HALF_HEIGHT - _BOUQUET_BG_PCT_CLEARANCE - _BOUQUET_BG_ROUNDING_SLACK
+    ) / _BOUQUET_BG_LINE_HEIGHT
+    pct_font = min(pct_font, max(16, math.floor(max_pct_font_by_space)))
     flower_size = round(min(56, max(32, row_height * 0.36)))
     # Half the clearance kept between the seam flower and each pct label -- flower_size
     # varies with row_height (see above), so a fixed CSS padding around the seam would
@@ -492,6 +528,9 @@ def _bouquet_geometry_boolean_grouped(breakdown: dict) -> dict:
                 "nej_pct": nej_pct,
                 "row_top": row_top,
                 "row_center": row_center,
+                # floor(), not round() -- see _BOUQUET_BG_ROUNDING_SLACK's comment above --
+                # so this only ever rounds towards "further from the track", never closer.
+                "pct_top": math.floor(row_center - _BOUQUET_BG_TRACK_HALF_HEIGHT - _BOUQUET_BG_PCT_CLEARANCE),
                 "seam_x": seam_x,
                 "ja_label_x": seam_x - label_gap,
                 "nej_label_x": seam_x + label_gap,

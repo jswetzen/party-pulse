@@ -756,6 +756,16 @@
 
 .style-bouquet .bg-label {
       position: absolute;
+      /* Without this, the ambient `.screen` page wrapper's own `text-align: center` (see
+         style.css) inherits down onto this element -- unlike every other bit of text in
+         Bouquet, this one has an explicit `width` (label_width) with no offsetting
+         transform on the X axis, so an inherited center visibly re-centers the group name
+         inside its column instead of hugging track_left's counterpart margin on the other
+         side of the row (see views._bouquet_geometry_*_grouped's shared left-hand-column
+         comment) -- read as "extra empty space on the left, too little on the right" since
+         the row's own track/stem/flower content already fills out to near the frame edge on
+         the right while the label sits shifted rightward, away from its own left margin. */
+      text-align: left;
       transform: translateY(-50%);
       line-height: 1.2;
     }
@@ -806,13 +816,18 @@
       font-weight: 600;
     }
 
+/* Y: -100% (bottom-anchored, growing upward from .bg-pct's `top`, itself already placed
+   above the track's own centerline by row.pct_top -- see
+   views._bouquet_geometry_boolean_grouped's docstring) rather than -50% (vertically
+   centered on the track), which used to put the 7px track line straight through the middle
+   of the digits. */
 .style-bouquet .bg-pct-ja {
-      transform: translate(-100%, -50%);
+      transform: translate(-100%, -100%);
       color: #9c5a52;
     }
 
 .style-bouquet .bg-pct-nej {
-      transform: translate(0, -50%);
+      transform: translate(0, -100%);
       color: #62704c;
     }
 
@@ -844,6 +859,8 @@
 
 .style-bouquet .mcg-label {
       position: absolute;
+      /* See .bg-label's comment above -- same inherited-center bug, same fix. */
+      text-align: left;
       transform: translateY(-50%);
       line-height: 1.2;
     }
@@ -907,6 +924,8 @@
 
 .style-bouquet .ng-label {
       position: absolute;
+      /* See .bg-label's comment above -- same inherited-center bug, same fix. */
+      text-align: left;
       transform: translateY(-50%);
       line-height: 1.2;
     }

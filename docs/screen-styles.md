@@ -406,6 +406,58 @@ worth recording since it's a reminder that "the documented workaround exists" an
 specific adaptation of it works" are different claims, and only the second one is what actual
 verification in a real engine can confirm.
 
+## Session summary (2026-09-08: Ribbon Rows number/line overlap + left-right alignment)
+
+Reported from Johan's visual review of the age-bucket change (5→6 groups, commit f1185d2):
+on Bouquet's Ribbon Rows (grouped) visuals at breakdown=Åldersgrupp, "numbers overlap with
+the lines/tracks and become illegible", and "left-right alignment looks off — extra empty
+space on the left, too little on the right." Reproduced first by screenshotting the real
+running app (headless Chromium, `manage.py runserver` + real seeded data) at all three
+grouped diagram types and 6 groups (Åldersgrupp), per this project's own established
+convention of never trusting a layout fix reasoned about from source alone. Two separate,
+unrelated real bugs, both confirmed visually before touching code:
+
+1. **Numbers overlapping tracks — boolean_grouped only.** `.bg-pct-ja`/`.bg-pct-nej` were
+   positioned at `top:row.row_center` with `transform: translateY(-50%)` — exactly the same
+   vertical center the `.bg-track` line itself uses — so the 7px track line was drawn
+   straight through the vertical middle of the "66,7% ja"/"33,3% nej" digits, cutting the
+   glyphs in half visually (confirmed by pixel-cropping the screenshot: the colored line ran
+   directly across the digit strokes). multiple_choice_grouped and number_grouped were not
+   affected — mcg's winner/other labels were already offset above/below their bloom via
+   `_BOUQUET_MCG_GAP`, and number_grouped has no line/track at all. Fixed by adding
+   `row.pct_top` (`views._bouquet_geometry_boolean_grouped`, floored not rounded — see its
+   own `_BOUQUET_BG_ROUNDING_SLACK` comment for why floor matters here), positioning the pct
+   labels bottom-anchored above the track's own centerline instead of vertically centered on
+   it (`translateY(-100%)` in CSS, not `-50%`). `pct_font_size`'s existing legibility floor
+   is now also clamped by how much vertical room half a row actually has above the track,
+   the same "floor first, shrink to fit if it doesn't clear" pattern
+   `multiple_choice_grouped`'s `bloom_max` already used — at 6 groups (this app's tightest
+   real case) the floor barely fit and needed the clamp to actually engage (font dropped
+   from 22px to 20px at 6 groups only; 2/3/4-group cases were already roomy enough and are
+   unaffected).
+2. **Alignment — all three grouped types.** The shared left-hand label column
+   (`.bg-label`/`.mcg-label`/`.ng-label`) has an explicit `width` (`label_width`, 420px) but
+   declared no `text-align` of its own, so it silently inherited `text-align: center` from
+   the ambient `.screen` page wrapper (`style.css`, used for the guest-facing pages' centered
+   layout) — every other piece of Bouquet text either has no explicit width (so text-align
+   can't visibly move it) or sets its own alignment, so this one slipped through unnoticed
+   since 2026-09-06. The pixel geometry itself was already symmetric (`label_left=140`
+   mirrors `1920 - (track_left+track_width)=140` exactly), but the inherited center-alignment
+   shifted the *visible* group-name text rightward within its column, so the row read as
+   "empty on the left, cramped on the right" even though the underlying numbers were correct
+   — a CSS inheritance bug, not a geometry bug, which is exactly why reproducing visually
+   mattered here: the geometry alone looked fine on paper. Fixed with one `text-align: left`
+   rule per label class.
+
+Verified with real headless-Chromium screenshots, before and after, for all three grouped
+diagram types at Åldersgrupp (6 groups) and a Kön (2 groups) spot-check to confirm the
+already-working small-group case wasn't regressed — all six renders confirmed correct
+(numbers clear of any line, labels flush left, no row-to-row collision even at 6 groups).
+123 tests pass (116 existing + a new parametrized geometry test asserting the pct label
+never overlaps its own track or a neighboring row at 2/3/4/6 groups, plus a CSS-text
+regression guard for the three label selectors' `text-align: left`, since the alignment bug
+was pure CSS inheritance that a geometry-only test can't see).
+
 ## Possible next steps
 
 Roughly in order of how self-contained each one is — none of this is started.

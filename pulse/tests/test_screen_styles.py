@@ -8,6 +8,9 @@ fits any question type at any breakdown, same as GENERIC. These tests cover the
 compatibility gate, each style's data-shaping helper(s), and screen_state()'s fallback to
 GENERIC when a style doesn't fit what's actually revealed (or nobody's answered yet)."""
 
+import re
+from pathlib import Path
+
 import pytest
 from django.contrib.auth.models import User
 
@@ -281,6 +284,37 @@ def test_bouquet_geometry_boolean_grouped_six_groups_get_shorter_rows_than_two()
     two_group_geo = _bouquet_geometry_boolean_grouped({"A": {"count": 1, "yes_pct": 50.0}, "B": {"count": 1, "yes_pct": 50.0}})
     assert two_group_geo["name_font_size"] > geo["name_font_size"]
     assert two_group_geo["flower_size"] > geo["flower_size"]
+
+
+@pytest.mark.parametrize("n", [2, 3, 4, 6])
+def test_bouquet_geometry_boolean_grouped_pct_labels_never_overlap_the_track_or_a_neighbor(n):
+    # Regression test for a real bug (found 2026-09-08 by screenshotting the actual running
+    # app, not visible from the geometry numbers alone -- see
+    # _bouquet_geometry_boolean_grouped's own docstring): the ja/nej pct labels used to sit
+    # vertically centered on the track's own centerline, exactly like the track itself, so
+    # the 7px track line was drawn straight through the middle of the digits. `pct_top` must
+    # keep the label's whole line clear above the track (a fixed half-height + clearance) --
+    # and, since font size and row height both vary with group count, that clearance must
+    # hold at every group count this app actually uses (sex=2 up through age=6), not just
+    # the specific one a screenshot happened to catch.
+    breakdown = {f"G{i}": {"count": 1, "yes_pct": 50.0 + i} for i in range(n)}
+
+    geo = _bouquet_geometry_boolean_grouped(breakdown)
+
+    track_half_height = 3.5  # .bg-track's CSS height (7px) / 2
+    line_height = 1.2  # same approximation the geometry function itself budgets against
+    pct_font = geo["pct_font_size"]
+    label_height = pct_font * line_height
+
+    for row in geo["rows"]:
+        # The label's bottom edge (pct_top, per the template's `translateY(-100%)`) must
+        # clear the track's own top edge -- i.e. sit strictly above the line, not on it.
+        assert row["pct_top"] <= row["row_center"] - track_half_height
+
+        # The label's own top edge (pct_top - label_height) must not creep above this row's
+        # own top boundary, which would collide with the row above at tight (6-group) row
+        # heights.
+        assert row["pct_top"] - label_height >= row["row_top"]
 
 
 # ---------------------------------------------------------------------------
@@ -758,3 +792,29 @@ def test_screen_control_post_persists_style(client):
 
     state = BigScreenState.load()
     assert state.style == "podium"
+
+
+# ---------------------------------------------------------------------------
+# Regression guard for a real bug (found 2026-09-08 by screenshotting the actual running
+# app): the Ribbon Rows grouped diagrams' left-hand ".??-label" column (.bg-label/.mcg-label/
+# .ng-label) has an explicit `width` but no `text-align` of its own, so it silently inherited
+# `text-align: center` from the ambient `.screen` page wrapper (style.css) -- every other bit
+# of Bouquet text either has no explicit width (so text-align can't visibly shift it) or sets
+# its own text-align, so this one slipped through. The visible effect was the group name/count
+# text centering inside its 420px column instead of hugging track_left's counterpart margin
+# on the row's other side -- read as "extra empty space on the left, too little on the right"
+# even though the underlying pixel geometry (label_left vs. canvas_width - track_right) was
+# already symmetric. A geometry-only test can't see this (the bug is pure CSS inheritance),
+# so this checks the stylesheet text directly rather than leaving it uncovered.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("label_class", ["bg-label", "mcg-label", "ng-label"])
+def test_screen_styles_css_grouped_label_column_is_left_aligned_not_inherited_center(label_class):
+    css = Path(__file__).resolve().parent.parent.joinpath("static", "pulse", "screen_styles.css").read_text()
+    match = re.search(r"\.style-bouquet \." + re.escape(label_class) + r"\s*\{([^}]*)\}", css)
+    assert match, f".style-bouquet .{label_class} rule not found in screen_styles.css"
+    assert "text-align: left" in match.group(1), (
+        f".{label_class} must set text-align:left explicitly -- without it, .screen's "
+        "ambient text-align:center (style.css) silently re-centers this column's text"
+    )

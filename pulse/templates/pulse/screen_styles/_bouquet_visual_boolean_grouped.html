@@ -11,6 +11,12 @@ is already page-absolute within the 1920x1080 stage, computed in Python -- same 
 as _bouquet_visual_multiple_choice.html -- so this partial gets its own `.bg-visual` wrapper
 at inset:0 rather than the single-group boolean diagram's `.visual` (CSS top:430px baked in,
 sized for exactly one split, not N of them).
+
+row.pct_top (not row.row_center) positions the ja/nej pct labels -- they sit just above the
+track's own centerline (bottom-anchored there via .bg-pct-ja/.bg-pct-nej's
+`translate(_, -100%)`), not vertically centered on it, so the 7px track line never runs
+through the middle of the digits the way an earlier version did (see
+views._bouquet_geometry_boolean_grouped's docstring).
 {% endcomment %}
 <div class="bg-visual">
   {% for row in bouquet.rows %}
@@ -24,8 +30,8 @@ sized for exactly one split, not N of them).
       <div class="bg-seg bg-seg-nej" style="left:{{ row.ja_seg_width }}px; width:{{ row.nej_seg_width }}px"></div>
     </div>
 
-    <div class="bg-pct bg-pct-ja" style="top:{{ row.row_center }}px; left:{{ row.ja_label_x }}px; font-size:{{ bouquet.pct_font_size }}px">{{ row.yes_pct }}% ja</div>
-    <div class="bg-pct bg-pct-nej" style="top:{{ row.row_center }}px; left:{{ row.nej_label_x }}px; font-size:{{ bouquet.pct_font_size }}px">{{ row.nej_pct }}% nej</div>
+    <div class="bg-pct bg-pct-ja" style="top:{{ row.pct_top }}px; left:{{ row.ja_label_x }}px; font-size:{{ bouquet.pct_font_size }}px">{{ row.yes_pct }}% ja</div>
+    <div class="bg-pct bg-pct-nej" style="top:{{ row.pct_top }}px; left:{{ row.nej_label_x }}px; font-size:{{ bouquet.pct_font_size }}px">{{ row.nej_pct }}% nej</div>
 
     <svg class="bg-seam bg-seam-{{ row.winner }}" width="{{ bouquet.flower_size }}" height="{{ bouquet.flower_size }}"
          viewBox="-24 -24 48 48" style="top:{{ row.row_center }}px; left:{{ row.seam_x }}px">
