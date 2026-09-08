@@ -458,6 +458,65 @@ never overlaps its own track or a neighboring row at 2/3/4/6 groups, plus a CSS-
 regression guard for the three label selectors' `text-align: left`, since the alignment bug
 was pure CSS inheritance that a geometry-only test can't see).
 
+## Session summary (2026-09-08, follow-up: Ribbon Rows row-to-row spacing)
+
+Reported from Johan looking at the real running container (the exact live boolean_grouped
+Åldersgrupp reveal above, 137 svar): "number alignment is better, but not element alignment"
+— explicitly distinct from the number/track-overlap and left-right text bugs the session
+above had just fixed, so this was diagnosed as a separate, still-open bug in the same area
+rather than a re-check of the same one. Investigated by measuring the actual rendered page
+with headless Chromium via CDP (`puppeteer-core` driving a `nix-shell -p chromium` binary,
+`getBoundingClientRect()`/pixel-sampling the real PNG output — the same "don't trust the
+Python numbers alone" discipline as every prior session in this file) rather than re-reading
+the geometry function's formulas and assuming they were right.
+
+The seam flower, the track, and the group-name label all measured **exactly** coincident on
+`row.row_center` for every one of the 6 Åldersgrupp rows (`label.cy == track.cy == seam.cy`
+to the pixel, confirmed both via `getBoundingClientRect()` and, for the flower specifically,
+by locating its yellow center-dot's own rendered pixels in a 4x-supersampled crop — 0.5px off
+the box's geometric center, i.e. correctly centered within anti-aliasing noise) — so *within*
+any single row, "is the flower on the line, is the line level with the label" was already
+correct and not the bug. The real defect only shows up **between** rows: diffing consecutive
+rows' measured `track.cy` gave `74, 72, 74, 72, 74` px gaps instead of a uniform `73`px, i.e.
+a real, alternating ±1px drift in the shared row-spacing rhythm across the whole diagram —
+exactly the "row-to-row consistency... does it drift" failure mode this session was
+specifically asked to check for, and exactly why it wasn't visible from inspecting any one
+row's own geometry.
+
+Root cause, found by reasoning about `_bouquet_geometry_boolean_grouped`'s
+`row_center = round(row_top + row_height / 2)` (identical in the multiple_choice_grouped and
+number_grouped siblings — a genuinely shared root cause, per this file's own "all three plot
+the same row band" convention): at exactly 6 groups, the fixed 438px row band divides evenly
+into a **whole-number** `row_height` (73.0) — the one group-count this app actually has where
+that's true (2 groups → 219.0, still whole but only one gap exists so alternation can't show;
+3 → 146.0, `row_height/2` is 73.0 exactly, no tie; 6 → 73.0, `row_height/2` is 36.5, landing
+*every single row* exactly on a rounding tie). Python's builtin `round()` breaks an exact .5
+tie via banker's rounding (nearest *even* integer), and because 73 is odd, each successive
+row's target value's integer part flips parity (450.5, 523.5, 596.5, ...) — so `round()`
+alternates which way it rounds, row after row. Confirmed by hand-deriving the exact sequence
+before touching any code, then matching it against the measured screenshot numbers.
+
+Fixed with a new `_round_half_up()` helper (`math.floor(x + 0.5)`, always breaks a tie the
+same direction) replacing the plain `round()` used for `row_top`/`row_center` in all three
+`_bouquet_geometry_*_grouped` functions — the smallest change that fixes the shared root
+cause everywhere it appears, rather than patching boolean_grouped alone. Verified
+algebraically first (a standalone script confirmed uniform `73,73,73,73,73` gaps after the
+change, vs. the old `74,72,74,72,74`), then confirmed against the real rebuilt container:
+`track.cy` now reads `451, 524, 597, 670, 743, 816` — a perfectly uniform 73px stride.
+multiple_choice_grouped and number_grouped weren't independently re-verified against a
+screenshot this session (no live data was on hand to drive them at 6 groups, and they share
+the exact same formula/fix, already covered by the new parametrized geometry test below) —
+said plainly per this project's own "don't overclaim verification" habit.
+
+One existing test's hard-coded expectation (`kvinna["row_center"] == 742` in the 2-group
+boolean_grouped test) baked in the old banker's-rounding artifact and had to be updated to
+`743` — not a behavior regression, the old value was simply the rounding bug's own output for
+that particular tie. 126 tests pass (123 existing + a new parametrized test, across all three
+grouped diagram types, asserting every row-to-row `row_center` gap at 6 groups is identical
+and equal to the true 73px row height, which the row_top-only regression test from the
+session above didn't and couldn't catch since `row_top` itself was never affected — only the
+downstream `row_center` add-half-then-round step was).
+
 ## Possible next steps
 
 Roughly in order of how self-contained each one is — none of this is started.

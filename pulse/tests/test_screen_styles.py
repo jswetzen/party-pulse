@@ -242,7 +242,11 @@ def test_bouquet_geometry_boolean_grouped_places_each_row_and_seam_from_its_own_
     assert man["ja_seg_width"] == 696 and man["nej_seg_width"] == 464
     assert man["winner"] == "ja"  # yes_pct > 50
 
-    assert kvinna["row_top"] == 633 and kvinna["row_center"] == 742
+    # row_center == 743, not the naive 742 midpoint -- 633 + 219/2 == 742.5 lands exactly on
+    # a rounding tie, and _round_half_up (not round()) always breaks that the same direction
+    # so consecutive rows' row_center values stay a uniform row_height apart -- see that
+    # helper's own docstring, and this file's row-to-row spacing regression test below.
+    assert kvinna["row_top"] == 633 and kvinna["row_center"] == 743
     assert kvinna["seam_x"] == 910  # 620 + 1160 * 25%
     assert kvinna["winner"] == "nej"  # yes_pct < 50
 
@@ -315,6 +319,40 @@ def test_bouquet_geometry_boolean_grouped_pct_labels_never_overlap_the_track_or_
         # own top boundary, which would collide with the row above at tight (6-group) row
         # heights.
         assert row["pct_top"] - label_height >= row["row_top"]
+
+
+@pytest.mark.parametrize(
+    "geometry_fn, breakdown_of",
+    [
+        (_bouquet_geometry_boolean_grouped, lambda i: {"count": 1, "yes_pct": 50.0}),
+        (_bouquet_geometry_multiple_choice_grouped, lambda i: {"count": 1, "options_pct": {"A": 50.0, "B": 50.0}}),
+        (_bouquet_geometry_number_grouped, lambda i: {"count": 1, "value": 1.0, "aggregation": "avg"}),
+    ],
+)
+def test_bouquet_geometry_grouped_row_center_spacing_is_uniform_at_six_groups(geometry_fn, breakdown_of):
+    # Regression test for a real bug (found 2026-09-08 on the live 6-group Åldersgrupp
+    # screenshot Johan actually reported "element alignment" against, distinct from the
+    # number/track-overlap and left-right text bugs a506c73 already fixed that same day --
+    # see _round_half_up's own docstring for the full mechanism): at exactly 6 groups, the
+    # fixed 438px row band splits into a *whole-number* row_height (73.0), which puts every
+    # row_center's `+row_height/2` term exactly on a .5 rounding tie -- and since 73 is odd,
+    # plain round()'s banker's-rounding (ties go to the nearest *even* integer) alternates
+    # which way it rounds from one row to the next, so consecutive row_center values came out
+    # 74px, 72px, 74px, 72px, 74px apart instead of a uniform 73px. Every row's own
+    # label/track/seam still agreed with EACH OTHER (all three always shared that row's one
+    # row_center), which is why this was invisible from any single row's geometry -- only
+    # diffing consecutive rows' row_center catches it, which is exactly what this test does,
+    # for all three grouped diagram types since they share the identical row_top/row_center
+    # formula (see _bouquet_grouped_label_font_sizes' own module comment on why they're
+    # defined once for all three).
+    breakdown = {f"G{i}": breakdown_of(i) for i in range(6)}
+
+    geo = geometry_fn(breakdown)
+
+    centers = [row["row_center"] for row in geo["rows"]]
+    gaps = [b - a for a, b in zip(centers, centers[1:])]
+    assert len(set(gaps)) == 1  # every row-to-row gap is the exact same width, not alternating
+    assert gaps[0] == 73  # (852-414)/6, this app's real Åldersgrupp row height
 
 
 # ---------------------------------------------------------------------------

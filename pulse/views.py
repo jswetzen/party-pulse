@@ -453,6 +453,27 @@ _BOUQUET_BG_LINE_HEIGHT = 1.2
 _BOUQUET_BG_ROUNDING_SLACK = 2
 
 
+def _round_half_up(x: float) -> int:
+    """Python's builtin round() breaks an exact .5 tie by rounding to the nearest *even*
+    integer (banker's rounding) -- invisible for a one-off value, but every row_center below
+    is one term in a sequence of N evenly-spaced coordinates
+    (_BOUQUET_GROUPED_ROWS_TOP + (i+0.5)*row_height), and whenever row_height itself happens
+    to be a whole number -- true today only at n=6, this app's real Åldersgrupp breakdown:
+    (852-414)/6 = 73.0 exactly -- the `+row_height/2` term lands EVERY row exactly on a .5
+    boundary, and since 73 is odd, each successive row's target value's integer part flips
+    parity (450.5, 523.5, 596.5, ...), so round()'s x.5->nearest-even rule alternates which
+    way it rounds from one row to the next. The result: consecutive row_center values come
+    out 74px, 72px, 74px, 72px, 74px apart instead of a uniform 73px, even though every row's
+    own label/track/seam still agree with EACH OTHER (all three still share that row's one
+    row_center) -- a "row-to-row" drift, not a within-row one, so it doesn't show up by
+    inspecting any single row's geometry, only by diffing consecutive rows' row_center
+    against each other (found exactly that way, 2026-09-08, on the real 6-group Åldersgrupp
+    screenshot -- see docs/screen-styles.md's session summary of this date). floor(x + 0.5)
+    always breaks a tie the same direction, so the row-to-row gap stays exactly row_height
+    wide regardless of row_height's own parity."""
+    return math.floor(x + 0.5)
+
+
 def _bouquet_grouped_label_font_sizes(row_height: float) -> tuple[int, int]:
     """(group-name font size, "N svar" font size) for the shared left-hand label column --
     scaled continuously with the row's own height (itself (rows band height) / (group
@@ -517,8 +538,11 @@ def _bouquet_geometry_boolean_grouped(breakdown: dict) -> dict:
         nej_pct = round(100 - yes_pct, 1)
         count = group["count"]
         total_count += count
-        row_top = round(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
-        row_center = round(row_top + row_height / 2)
+        # _round_half_up, not round() -- see that helper's own docstring for why a plain
+        # round() here alternately rounds row_center up/down row-to-row (banker's rounding
+        # tie-breaking on an exact .5, hit whenever row_height itself is a whole number).
+        row_top = _round_half_up(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
+        row_center = _round_half_up(row_top + row_height / 2)
         seam_x = round(_BOUQUET_GROUPED_TRACK_LEFT + _BOUQUET_GROUPED_TRACK_WIDTH * yes_pct / 100)
         rows.append(
             {
@@ -623,8 +647,11 @@ def _bouquet_geometry_multiple_choice_grouped(breakdown: dict) -> dict:
     for i, (label, group) in enumerate(items):
         count = group["count"]
         total_count += count
-        row_top = round(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
-        row_center = round(row_top + row_height / 2)
+        # _round_half_up, not round() -- see that helper's own docstring for why a plain
+        # round() here alternately rounds row_center up/down row-to-row (banker's rounding
+        # tie-breaking on an exact .5, hit whenever row_height itself is a whole number).
+        row_top = _round_half_up(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
+        row_center = _round_half_up(row_top + row_height / 2)
         # Stable sort keeps ties in their original (dict-insertion) order, same convention
         # as _rank_podium/_bouquet_geometry_multiple_choice's identical sort call above.
         ranked = sorted(group["options_pct"].items(), key=lambda item: -item[1])
@@ -694,8 +721,11 @@ def _bouquet_geometry_number_grouped(breakdown: dict) -> dict:
         count = group["count"]
         total_count += count
         aggregation = group["aggregation"]
-        row_top = round(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
-        row_center = round(row_top + row_height / 2)
+        # _round_half_up, not round() -- see that helper's own docstring for why a plain
+        # round() here alternately rounds row_center up/down row-to-row (banker's rounding
+        # tie-breaking on an exact .5, hit whenever row_height itself is a whole number).
+        row_top = _round_half_up(_BOUQUET_GROUPED_ROWS_TOP + i * row_height)
+        row_center = _round_half_up(row_top + row_height / 2)
         rows.append(
             {
                 "label": label,
