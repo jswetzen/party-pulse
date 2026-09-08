@@ -549,7 +549,24 @@ def _bouquet_geometry_boolean_grouped(breakdown: dict) -> dict:
     floor doesn't clear" pattern multiple_choice_grouped's `bloom_max` already uses below --
     at 6 rows the floor barely clears with the fixed clearance chosen here; a hard-coded
     offset that ignored this would silently start re-overlapping at a 7th group count this
-    app doesn't have yet but shouldn't need re-deriving by hand if it ever does."""
+    app doesn't have yet but shouldn't need re-deriving by hand if it ever does.
+
+    `ja_label_x`/`nej_label_x` are `seam_x +/- label_gap`, clamped to the track's own
+    [track_left, track_left+track_width] bounds -- unclamped, a group at an extreme yes_pct
+    (near 0% or 100%, both legitimate real values: aggregations._aggregate_group's
+    `round(100*yes/count, 1)` is exactly 0.0/100.0 whenever every respondent in that group
+    answered the same way) would push the *outer* label -- the one on the small-percentage
+    side, further from the seam toward that end of the track -- past the track's own end:
+    into the stationery frame past the far edge, or back into the label gutter past the near
+    edge. No real seeded data reaches that range today (measured span across every real
+    boolean x breakdown x group combination: 9.1%-89.3%), so this has no visible trigger yet
+    -- clamped anyway since the geometry should be correct at every mathematically possible
+    yes_pct, not just the ones this app's current question bank happens to produce. The clamp
+    lands the label at the track's own edge nearest the tiny segment (rather than sailing past
+    it), which is also exactly right at the true 0%/100% edge cases where that segment is
+    literally empty -- e.g. at yes_pct=0, seam_x sits at track_left, and clamping ja_label_x
+    to track_left plants the (0%) ja label right at the track's own start rather than off its
+    left end."""
     items = list(breakdown.items())
     n = len(items)
     row_height = (_BOUQUET_GROUPED_ROWS_BOTTOM - _BOUQUET_GROUPED_ROWS_TOP) / n
@@ -598,8 +615,15 @@ def _bouquet_geometry_boolean_grouped(breakdown: dict) -> dict:
                 # so this only ever rounds towards "further from the track", never closer.
                 "pct_top": math.floor(row_center - _BOUQUET_BG_TRACK_HALF_HEIGHT - _BOUQUET_BG_PCT_CLEARANCE),
                 "seam_x": seam_x,
-                "ja_label_x": seam_x - label_gap,
-                "nej_label_x": seam_x + label_gap,
+                # Clamped to the track's own bounds -- see this function's docstring. At a
+                # moderate split neither clamp ever engages (label_gap is small relative to
+                # track_width, so seam_x +/- label_gap stays well inside [track_left,
+                # track_left+track_width] whenever both segments have real width), but at an
+                # extreme split (one segment near-empty) the *unclamped* outer label would sail
+                # past the track's own end -- into the stationery frame on the small segment's
+                # side, or back into the label gutter on the near-100% side.
+                "ja_label_x": max(_BOUQUET_GROUPED_TRACK_LEFT, seam_x - label_gap),
+                "nej_label_x": min(_BOUQUET_GROUPED_TRACK_LEFT + _BOUQUET_GROUPED_TRACK_WIDTH, seam_x + label_gap),
                 "ja_seg_width": seam_x - _BOUQUET_GROUPED_TRACK_LEFT,
                 "nej_seg_left": seam_x,
                 "nej_seg_width": _BOUQUET_GROUPED_TRACK_LEFT + _BOUQUET_GROUPED_TRACK_WIDTH - seam_x,
@@ -644,6 +668,13 @@ _BOUQUET_MCG_GAP = 5
 # that arithmetic themselves (same "pre-computed pixel, not template arithmetic" convention
 # as everywhere else in this file).
 _BOUQUET_MCG_LINE_HEIGHT = 1.2
+# Horizontal clearance (px, split evenly either side) subtracted from a raw slot's width
+# before it's handed to the template as the label's own CSS `width` -- see `slot_width`
+# below. Without it, two adjacent labels that each truncate right up to their own slot's
+# exact edge would visually touch with zero gap between the ellipses; this keeps a hairline
+# of breathing room between them instead, same spirit as _BOUQUET_BG_PCT_CLEARANCE elsewhere
+# in this module.
+_BOUQUET_MCG_SLOT_GUTTER = 8
 
 
 def _bouquet_geometry_multiple_choice_grouped(breakdown: dict) -> dict:
@@ -678,7 +709,26 @@ def _bouquet_geometry_multiple_choice_grouped(breakdown: dict) -> dict:
     A genuine tie for the top spot (two options at the same max pct within a row) is common
     with small groups -- both get the winner's "above the stem" treatment, decided by `pct
     == row's own max` rather than `rank == 0`, so a tie doesn't arbitrarily crown only one of
-    them."""
+    them.
+
+    Each option's label (`.mcg-winner-label`/`.mcg-other-label`) is `white-space: nowrap` and
+    centred on its own bloom, with nothing constraining its rendered width -- a real,
+    pre-existing bug (found 2026-09-06, still present after the 2026-09-08 band-widening
+    reduced but didn't eliminate it -- see docs/screen-styles.md's "Possible next steps" #2a
+    and that date's follow-up-2 session summary): a row's own per-option slot is only
+    `track_width / m` wide (`m` = that row's own option count), but real seeded option text
+    can be wider than that at low group counts regardless of slot width -- "Något bubbligt och
+    alkoholfritt 27,0%" measures ~265px against a ~268px slot even at the roomiest (2-group)
+    case, and shrinking the font further would drop below this project's own legibility floor
+    (`other_font`/`winner_font`'s own `max(...)` clamps above). Fixed by handing the template
+    `slot_width` (this row's own real per-option slot, minus a small shared gutter -- see
+    `_BOUQUET_MCG_SLOT_GUTTER`) so the label can be given a CSS `width` and truncated with an
+    ellipsis (`text-overflow: ellipsis`) when it doesn't fit, rather than left to overflow into
+    a neighboring slot's text -- the standard mechanism for "this text is really this wide, but
+    only this much room exists," and the only one of the three considered upfront (ellipsis,
+    hide non-winner labels, shrink font further) that doesn't either drop information guests
+    can currently read or breach the legibility floor everything else in this diagram already
+    respects."""
     items = list(breakdown.items())
     n = len(items)
     row_height = (_BOUQUET_GROUPED_ROWS_BOTTOM - _BOUQUET_GROUPED_ROWS_TOP) / n
@@ -712,6 +762,11 @@ def _bouquet_geometry_multiple_choice_grouped(breakdown: dict) -> dict:
         ranked = sorted(group["options_pct"].items(), key=lambda item: -item[1])
         row_max_pct = ranked[0][1]
         m = len(ranked)
+        # This row's own real per-option slot, minus a small shared gutter -- see
+        # _BOUQUET_MCG_SLOT_GUTTER's own comment and this function's docstring. Handed to the
+        # template as the label's CSS `width` so overlong option text truncates with an
+        # ellipsis instead of overflowing into the neighboring slot's label.
+        slot_width = max(40, round(_BOUQUET_GROUPED_TRACK_WIDTH / m - _BOUQUET_MCG_SLOT_GUTTER))
         options = []
         for rank_index, (opt_label, pct) in enumerate(ranked):
             x = round(_BOUQUET_GROUPED_TRACK_LEFT + _BOUQUET_GROUPED_TRACK_WIDTH * (rank_index + 0.5) / m)
@@ -736,7 +791,16 @@ def _bouquet_geometry_multiple_choice_grouped(breakdown: dict) -> dict:
                     "other_label_top": round(bloom_bottom + _BOUQUET_MCG_GAP),
                 }
             )
-        rows.append({"label": label, "count": count, "row_top": row_top, "row_center": row_center, "options": options})
+        rows.append(
+            {
+                "label": label,
+                "count": count,
+                "row_top": row_top,
+                "row_center": row_center,
+                "slot_width": slot_width,
+                "options": options,
+            }
+        )
     return {
         "kind": "multiple_choice_grouped",
         "count": total_count,

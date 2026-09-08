@@ -12,6 +12,11 @@ same "Label pct%" shape below the stem, smaller -- the same "only the winner get
 prominent label" trade-off the RibbonRows mockup made, so a 5-option x 5-group grid still
 fits on one screen without every one of 25 labels competing for space.
 
+Each label's `width` is `row.slot_width` (that row's own real per-option slot, see the
+geometry function's docstring), not its natural text width -- long option text truncates
+with an ellipsis (CSS `text-overflow: ellipsis` in screen_styles.css) rather than overflowing
+into a neighboring slot's label.
+
 Every coordinate is page-absolute within the 1920x1080 stage (same convention as the other
 grouped/_multiple_choice partials), so `.mcg-visual` sits at inset:0.
 {% endcomment %}
@@ -40,9 +45,9 @@ grouped/_multiple_choice partials), so `.mcg-visual` sits at inset:0.
       </svg>
 
       {% if opt.is_winner %}
-        <div class="mcg-winner-label" style="left:{{ opt.x }}px; top:{{ opt.winner_label_top }}px; font-size:{{ bouquet.winner_font_size }}px">{{ opt.label }} {{ opt.pct }}%</div>
+        <div class="mcg-winner-label" style="left:{{ opt.x }}px; top:{{ opt.winner_label_top }}px; width:{{ row.slot_width }}px; font-size:{{ bouquet.winner_font_size }}px">{{ opt.label }} {{ opt.pct }}%</div>
       {% else %}
-        <div class="mcg-other-label" style="left:{{ opt.x }}px; top:{{ opt.other_label_top }}px; font-size:{{ bouquet.other_font_size }}px">{{ opt.label }} {{ opt.pct }}%</div>
+        <div class="mcg-other-label" style="left:{{ opt.x }}px; top:{{ opt.other_label_top }}px; width:{{ row.slot_width }}px; font-size:{{ bouquet.other_font_size }}px">{{ opt.label }} {{ opt.pct }}%</div>
       {% endif %}
     {% endfor %}
   {% endfor %}

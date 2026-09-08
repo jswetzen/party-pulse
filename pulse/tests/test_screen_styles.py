@@ -321,6 +321,34 @@ def test_bouquet_geometry_boolean_grouped_pct_labels_never_overlap_the_track_or_
         assert row["pct_top"] - label_height >= row["row_top"]
 
 
+@pytest.mark.parametrize("ja_pct", [0.0, 1.0, 4.0, 96.0, 99.0, 100.0])
+def test_bouquet_geometry_boolean_grouped_pct_labels_stay_within_track_bounds_at_extreme_splits(ja_pct):
+    # Regression test for a latent edge the geometry has always had, first noted (but left
+    # unfixed) 2026-09-08: `ja_label_x`/`nej_label_x` are `seam_x +/- label_gap`, and at an
+    # extreme yes_pct (near 0% or 100%) the *outer* label -- the one on the small-percentage
+    # side, positioned further from the seam toward that end of the track -- would sail past
+    # the track's own end (into the stationery frame, or back into the label gutter) since
+    # nothing clamped it. No real seeded data reaches that range (measured span across every
+    # real boolean x breakdown x group combination: 9.1%-89.3%), so this needs a synthetic
+    # test, not a real screenshot -- see that function's own docstring for the fix (clamp both
+    # label anchors to [track_left, track_left+track_width]) and why 0.0/100.0 are themselves
+    # legitimate values (aggregations._aggregate_group's yes_pct rounds to exactly 0.0/100.0
+    # whenever every respondent in a group answered the same way, not just a hypothetical).
+    breakdown = {"Alla": {"count": 10, "yes_pct": ja_pct}}
+
+    geo = _bouquet_geometry_boolean_grouped(breakdown)
+    row = geo["rows"][0]
+
+    track_left = geo["track_left"]
+    track_right = geo["track_left"] + geo["track_width"]
+    assert track_left <= row["ja_label_x"] <= track_right, (
+        f"ja_pct={ja_pct}: ja_label_x={row['ja_label_x']} outside track bounds [{track_left}, {track_right}]"
+    )
+    assert track_left <= row["nej_label_x"] <= track_right, (
+        f"ja_pct={ja_pct}: nej_label_x={row['nej_label_x']} outside track bounds [{track_left}, {track_right}]"
+    )
+
+
 @pytest.mark.parametrize(
     "geometry_fn, breakdown_of",
     [
@@ -424,6 +452,83 @@ def test_bouquet_geometry_multiple_choice_grouped_options_are_left_to_right_by_r
     assert [opt["label"] for opt in options] == ["A", "B", "C"]  # highest pct first, left-to-right
     xs = [opt["x"] for opt in options]
     assert xs == sorted(xs)
+
+
+# ---------------------------------------------------------------------------
+# Regression coverage for a real, pre-existing bug (first measured 2026-09-06, still present
+# after the 2026-09-08 band-widening reduced but didn't eliminate it -- see
+# docs/screen-styles.md's "Possible next steps" #2a): `.mcg-winner-label`/`.mcg-other-label`
+# are `white-space: nowrap` and centred on their own bloom with nothing constraining their
+# rendered width, so long option text can overflow into a neighboring option's slot. Measured
+# before this fix: Kön (2 groups) had 5 overlapping label pairs, up to 61.2px of overlap.
+# Fixed by handing the template `row["slot_width"]` (this row's own real per-option slot,
+# `track_width / m`, minus a small shared gutter) as the label's CSS `width`, truncated with
+# an ellipsis when it doesn't fit -- see _bouquet_geometry_multiple_choice_grouped's own
+# docstring for why ellipsis-truncation was picked over shrinking the font further (already at
+# its legibility floor) or hiding non-winner labels (a bigger information-display change).
+#
+# A real font-rendering measurement (actual glyph widths, actual overlap in px) needs a
+# browser -- covered separately by the real headless-Chromium screenshots taken to verify this
+# session's fix (see the task's own verify loop). What a plain Python unit test *can* assert
+# directly, and exactly, is the geometry every label's box is built from: each option's box is
+# `slot_width` wide, centred on that option's own `x`, and options within a row are evenly
+# spaced `track_width / m` apart -- so as long as `slot_width <= track_width / m`, no two
+# adjacent boxes can overlap regardless of how wide their *text* actually renders (the
+# remaining, real "text taller than its own slot" case is exactly what the ellipsis in the CSS
+# handles, and is what the box-width guarantee below exists to make truncate rather than spill
+# over).
+# ---------------------------------------------------------------------------
+
+# The longest real seeded multiple_choice option strings (pulse/management/commands/data/
+# questions.json, measured 2026-09-08) -- used here (as labels, not for pixel measurement) so
+# the slot-count/group-count combinations this test exercises are ones the app's real question
+# bank can actually produce, not an arbitrary synthetic worst case.
+_REAL_LONG_MC_OPTIONS = [
+    "Klinga i glaset så brudparet kysser varandra",
+    "Djupt i ett hjärtligt samtal i soffhörnet",
+    "Att de erövrar dansgolvet på varje fest",
+    "På en välbehövlig frisk luft-paus",
+    'Väntar tåligt på "Dancing Queen"',
+]
+
+
+@pytest.mark.parametrize("n_groups", [2, 3, 4, 6])  # sex/side&relation/-/age -- every real breakdown size
+@pytest.mark.parametrize("m_options", [2, 3, 4, 5])  # this app's real MC question option counts
+def test_bouquet_geometry_multiple_choice_grouped_option_label_slots_never_overlap(n_groups, m_options):
+    labels = _REAL_LONG_MC_OPTIONS[:m_options]
+    pcts = [round(100 / m_options, 1)] * m_options
+    breakdown = {f"G{i}": {"count": 1, "options_pct": dict(zip(labels, pcts))} for i in range(n_groups)}
+
+    geo = _bouquet_geometry_multiple_choice_grouped(breakdown)
+
+    for row in geo["rows"]:
+        xs = [opt["x"] for opt in row["options"]]
+        # Options are evenly spaced (track_width/m_options apart) and every label box is the
+        # same slot_width wide, centred on its own x -- so the gap between two consecutive
+        # centres must be at least slot_width for their boxes to not overlap.
+        for x_a, x_b in zip(xs, xs[1:]):
+            assert x_b - x_a >= row["slot_width"], (
+                f"n_groups={n_groups} m_options={m_options}: adjacent option label boxes "
+                f"overlap ({x_b - x_a}px centre gap < {row['slot_width']}px slot_width)"
+            )
+        # The slot itself must actually fit inside this row's own data band, not just be
+        # internally consistent -- a slot_width bigger than the band divided evenly would mean
+        # the *first* and *last* option's boxes spill outside the band's own edges.
+        assert row["slot_width"] <= geo["track_width"] / m_options
+
+
+def test_bouquet_geometry_multiple_choice_grouped_slot_width_is_the_real_per_option_slot():
+    # Pins the exact formula (this row's real slot minus the shared gutter, not an
+    # unconstrained natural-text width) rather than only checking the non-overlap property
+    # above, so a future change that widens the gutter or the slot itself is a visible,
+    # deliberate diff here.
+    breakdown = {"Alla": {"count": 1, "options_pct": {"A": 50.0, "B": 30.0, "C": 20.0}}}
+
+    geo = _bouquet_geometry_multiple_choice_grouped(breakdown)
+
+    assert geo["track_width"] == 1340  # _BOUQUET_GROUPED_TRACK_WIDTH, see that constant's own comment
+    # 1340 / 3 options - 8px shared gutter = 438.67 -> 439
+    assert geo["rows"][0]["slot_width"] == 439
 
 
 # ---------------------------------------------------------------------------
@@ -857,6 +962,24 @@ def test_screen_styles_css_grouped_label_column_is_left_aligned_not_inherited_ce
         f".{label_class} must set text-align:left explicitly -- without it, .screen's "
         "ambient text-align:center (style.css) silently re-centers this column's text"
     )
+
+
+@pytest.mark.parametrize("label_class", ["mcg-winner-label", "mcg-other-label"])
+def test_screen_styles_css_mcg_option_labels_truncate_with_an_ellipsis(label_class):
+    # Regression guard for the option-label-collision fix (see the geometry tests above): a
+    # width-constrained `white-space: nowrap` box needs `overflow: hidden` +
+    # `text-overflow: ellipsis` together, or overlong text either overflows its box visibly
+    # (missing overflow:hidden) or is clipped with no visual cue that anything was cut
+    # (overflow:hidden alone, no text-overflow:ellipsis) -- neither of which is what "truncate
+    # with an ellipsis so guests can tell text was cut" (the chosen fix) actually needs. A
+    # geometry-only test can't see this -- it's pure CSS, like the text-align regression above.
+    css = Path(__file__).resolve().parent.parent.joinpath("static", "pulse", "screen_styles.css").read_text()
+    match = re.search(r"\.style-bouquet \." + re.escape(label_class) + r"\s*\{([^}]*)\}", css)
+    assert match, f".style-bouquet .{label_class} rule not found in screen_styles.css"
+    rule = match.group(1)
+    assert "overflow: hidden" in rule, f".{label_class} must set overflow:hidden for text-overflow:ellipsis to apply"
+    assert "text-overflow: ellipsis" in rule, f".{label_class} must set text-overflow:ellipsis to visibly mark truncated text"
+    assert "white-space: nowrap" in rule, f".{label_class} must stay white-space:nowrap -- text-overflow:ellipsis needs it"
 
 
 # ---------------------------------------------------------------------------

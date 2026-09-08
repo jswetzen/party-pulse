@@ -624,7 +624,91 @@ and is listed under "Possible next steps" below rather than half-fixed here.
 frame) or back into the label gutter, since `seam_x ± label_gap` is not clamped to the band.
 The real data across all 182 (boolean question × breakdown × group) cells currently spans
 9,1%–89,3%, so nothing in the app hits it today; left alone deliberately rather than adding
-an unmeasured text-width fudge factor to a fix that isn't about it.
+an unmeasured text-width fudge factor to a fix that isn't about it. **Fixed in the 2026-09-08
+follow-up-3 session below.**
+
+## Session summary (2026-09-08, follow-up 3: mcg label truncation + boolean pct clamping)
+
+Two follow-on bugs in the same "Ribbon Rows" area, both explicitly identified (not newly
+reported) at the end of the horizontal-spacing session above: `multiple_choice_grouped`'s
+option-label collisions ("Possible next steps" #2a) and boolean_grouped's un-clamped extreme-
+split pct labels (the "Not verified" note directly above). Fixed both.
+
+1. **multiple_choice_grouped option labels overlapping.** `.mcg-winner-label`/
+   `.mcg-other-label` were `white-space: nowrap`, centred on their own bloom, with nothing
+   constraining rendered width — real seeded option text (e.g. "Något bubbligt och
+   alkoholfritt" from question 18) is up to 44 characters and can be wider than its own
+   per-option slot (`track_width / m`) regardless of how wide the band itself is. Measured
+   before this fix (carried over from the prior session's numbers): Kön (2 groups) had 5
+   overlapping label pairs, up to 61,2px of overlap; the 2026-09-08 band-widening reduced but
+   did not eliminate this (1 pair, 25,2px, at 2 groups; effectively gone at 6). Considered
+   three fixes (per the task's own framing): shrink the font further (already at this
+   diagram's legibility floor per `_bouquet_grouped_label_font_sizes`-adjacent clamps), hide
+   non-winner labels (a bigger information-display change, drops data guests can currently
+   read), or truncate with an ellipsis. Picked ellipsis-truncation, the default/expected
+   approach — it's the only one of the three that neither breaches the legibility floor nor
+   removes information outright, just marks that some was cut. Implemented by adding
+   `row["slot_width"]` to `_bouquet_geometry_multiple_choice_grouped` (`track_width / m` for
+   that row's own option count, minus a small shared `_BOUQUET_MCG_SLOT_GUTTER` so adjacent
+   truncated labels keep a hairline gap rather than touching edge-to-edge), handed to the
+   template as each label's CSS `width`, with `overflow: hidden` + `text-overflow: ellipsis`
+   added to both label classes in `screen_styles.css` (kept `text-align: center` so the common
+   case — text already narrower than its slot — renders pixel-identical to before; only
+   overflowing text is affected).
+
+   **Real seeded text can still be truncated hard enough to lose the percentage entirely** —
+   worth flagging even though ellipsis-truncation shipped as the mechanism, per the task's own
+   ask: at Kön (2 groups, the roomiest case), a winner label uses the bigger ~30px font, and
+   "Något bubbligt och alkoholfritt 27,0%" truncates to "Något bubbligt och al…" — the "27,0%"
+   is gone entirely, not just abbreviated. Non-winner labels (smaller font) fare better ("…kys…"
+   mid-word cuts happen but the pct usually survives). No option text in the current question
+   bank is so long that this reaches "2-3 words" territory — worst case keeps 4-5 of a 6-word
+   option — so this was judged acceptable to ship rather than a blocker, but a future pass
+   trimming the couple of 40+ character options in `data/questions.json` (or reserving the
+   pct for a fixed-position suffix instead of appending it to the truncatable string) would
+   remove the "winner label loses its own number" case entirely.
+
+2. **boolean_grouped pct labels un-clamped at extreme splits.** `ja_label_x`/`nej_label_x`
+   (`seam_x ± label_gap`) had no bound, so a group at ja_pct ≥ ~96% or ≤ ~4% could push the
+   *outer* label (the one on the small-percentage side) past the track's own end. No real
+   data reaches that range (9,1%–89,3% measured across all 182 real cells), so this was
+   verified with synthetic data: a temporary boolean question (deleted after) with a 6-
+   respondent group at yes_pct=100,0% and a 25-respondent group at yes_pct=4,0% (the
+   `round(100*yes/count, 1)` formula in `aggregations._aggregate_group` does legitimately
+   produce exact 0,0/100,0 whenever every respondent in a group answered the same way — not
+   just a hypothetical). Fixed by clamping both label anchors to
+   `[track_left, track_left + track_width]` in `_bouquet_geometry_boolean_grouped`. Confirmed
+   via the same headless-Chromium+CDP measurement this whole file's sessions have used: at
+   ja_pct=100,0%, `nej_label_x` (the outer/small-side label's anchor) now measures exactly
+   `1780` (`track_left + track_width`) instead of running past it.
+
+   **Worth recording, not further engineered**: clamping the *anchor* (what the task asked
+   for) does not stop the *rendered text* from extending past the anchor into the page's
+   outer margin — at the true 100%/0% edge, "ja" and "nej" both crowd onto the same end of a
+   now-tiny effective span, and the clamped "0,0% nej" label's own text (which grows
+   rightward from its clamped anchor) measured to x≈1888, past the stationery frame's own
+   outer edge (x=1866) and cosmetically overlapping that corner's decorative sprig — visible,
+   not clipped or off-canvas, and strictly closer to the track than the pre-fix (unclamped)
+   position would have been. The task's ask was specifically to keep the label's *position*
+   within track bounds, which this does exactly; preventing the decorative-corner overlap too
+   would need a second, different mechanism (e.g. shrinking label_gap near the extremes) and
+   wasn't attempted, since it's a purely cosmetic edge-of-an-edge-case with zero real-data
+   trigger today.
+
+Verified: 155 tests pass (130 existing + 25 new — a parametrized non-overlap test for mcg
+option-label slots across every real group-count × option-count combination this app
+produces, using the app's own longest real seeded option strings; a CSS regression guard for
+the two label classes' `overflow`/`text-overflow`/`white-space`; a parametrized test asserting
+`ja_label_x`/`nej_label_x` stay within track bounds at ja_pct ∈ {0, 1, 4, 96, 99, 100}).
+Screenshotted the real rebuilt container (headless Chromium via CDP, puppeteer-core driving a
+`nix-shell -p chromium` binary — the same tooling every prior session in this file used):
+question 18 (5 options, including the "Något bubbligt och alkoholfritt" worst case) at Kön;
+question 21 (contains the 44-character "Klinga i glaset så brudparet kysser varandra" option)
+at both Kön and Åldersgrupp; the synthetic 100%/4% boolean case above; and a real boolean
+question at Åldersgrupp as an a506c73/eeaed0c/a245109 regression spot-check (uniform 73px
+row-to-row stride confirmed, numbers clear of tracks, labels flush left). No overlapping
+label pairs measured in any of the real-data screenshots (`getBoundingClientRect()` on every
+`.mcg-winner-label`/`.mcg-other-label`, not eyeballed).
 
 ## Possible next steps
 
@@ -643,16 +727,12 @@ Roughly in order of how self-contained each one is — none of this is started.
    per-group breakdowns for all three diagram types, "Ribbon Rows" — shipped 2026-09-06, see
    that session summary above; this Podium extension is the one still-open piece of the
    original two-item follow-up.)
-2a. **multiple_choice_grouped's option labels still collide horizontally at small group
-   counts.** Each label is `white-space: nowrap` and centred on its own bloom, so a long
-   option ("Något bubbligt och alkoholfritt 27,0%" ≈ 265px) simply doesn't fit its slot
-   (band width / option count ≈ 268px at 5 options). Measured 2026-09-08 after the band
-   widened: gone at 6 groups, one remaining pair overlapping 25,2px at 2 groups (it was five
-   pairs, up to 61,2px, before). Not fixable by widening further, and shrinking the font to
-   fit would break this project's legibility floor — so it needs a real decision:
-   truncate with an ellipsis, shorten the option texts themselves in the question bank, or
-   show only the winner's label at small group counts. Deliberately left open rather than
-   half-fixed; see the 2026-09-08 follow-up-2 session summary for the numbers.
+2a. ~~multiple_choice_grouped's option labels still collide horizontally at small group
+   counts~~ **Fixed 2026-09-08 (follow-up 3)**: labels now truncate with an ellipsis at their
+   own real per-option slot width (`row["slot_width"]`) instead of overflowing into a
+   neighbor's slot. See that session summary for the fix and the one known remaining rough
+   edge (the winner label can lose its own "NN,N%" suffix entirely on the very longest real
+   option strings at 2-group breakdowns).
 2b. **A tie-arc connector for multiple_choice_grouped**, matching the RibbonRows mockup's
    "DELAD 1:A" flourish when two blooms tie for first in a row — currently both tied blooms
    just get the prominent label independently (see the 2026-09-06 session summary's

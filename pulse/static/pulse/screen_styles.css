@@ -894,6 +894,15 @@
       filter: drop-shadow(0 2px 3px rgba(60,47,34,0.16));
     }
 
+/* width comes from the template (`row.slot_width`, views._bouquet_geometry_multiple_choice_
+   grouped) -- this row's own real per-option slot minus a small shared gutter, NOT this
+   text's natural width. Without a constrained width, `white-space: nowrap` lets long option
+   text overflow straight into the neighboring slot's label (a real, pre-existing bug -- see
+   that function's own docstring); `overflow: hidden` + `text-overflow: ellipsis` truncates
+   visibly (an ellipsis, not a silent clip) instead. `text-align: center` keeps the common
+   case (text already narrower than its slot) pixel-identical to before -- the box is still
+   centred on the bloom via `translate(-50%, ...)`, only text that actually overflows its own
+   width is affected. */
 .style-bouquet .mcg-winner-label {
       position: absolute;
       transform: translate(-50%, -100%);
@@ -902,6 +911,9 @@
       line-height: 1.2;
       color: #3c2f22;
       white-space: nowrap;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
 .style-bouquet .mcg-other-label {
@@ -911,6 +923,9 @@
       line-height: 1.2;
       color: #8a7a63;
       white-space: nowrap;
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
 /* ---- number_grouped (_bouquet_visual_number_grouped.html) ---- */
