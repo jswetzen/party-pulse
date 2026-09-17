@@ -568,6 +568,63 @@ def test_bouquet_geometry_number_grouped_uses_the_real_aggregation_not_a_hardcod
     assert geo["aggregation_label"] == "Max"
 
 
+def test_bouquet_geometry_number_grouped_scales_flower_size_relative_to_the_views_own_min_and_max():
+    # Real-shaped regression for the 2026-09-15 change: Johan's own reported example
+    # (photos-tonight-by-relation, wildly different values next to visually-identical
+    # flowers) collapsed to three groups here. The biggest value must get the biggest
+    # (ceiling) flower, the smallest value the smallest (floor) flower, and a value roughly a
+    # third of the way from min to max must land strictly between them -- not just "some
+    # difference exists", the actual interpolated pixel sizes, so a future change to the
+    # formula has to own up to changing these numbers.
+    breakdown = {
+        "Familj": {"count": 20, "value": 143.0, "aggregation": "avg"},
+        "Vän": {"count": 20, "value": 50.0, "aggregation": "avg"},
+        "Plus en": {"count": 20, "value": 8.5, "aggregation": "avg"},
+    }
+
+    geo = _bouquet_geometry_number_grouped(breakdown)
+
+    by_label = {row["label"]: row["flower_size"] for row in geo["rows"]}
+    # row_height = (852-414)/3 = 146 -> ceiling = round(min(92, max(40, 73))) = 73,
+    # floor = max(20, round(73*0.5)) = 36 (banker's rounding: round(36.5) -> 36, same
+    # round() this module already uses for the ceiling itself).
+    assert by_label["Familj"] == 73  # the view's own max value -> the ceiling
+    assert by_label["Plus en"] == 36  # the view's own min value -> the floor
+    assert by_label["Vän"] == 47  # (50-8.5)/(143-8.5) = 0.309 of the way up -> interpolated
+    # Ordering must track value ordering even without hand-checking the exact pixels.
+    assert by_label["Familj"] > by_label["Vän"] > by_label["Plus en"]
+
+
+def test_bouquet_geometry_number_grouped_equal_values_render_uniformly_at_the_ceiling_not_zero():
+    # Degenerate case this app can genuinely hit (e.g. two groups whose averages round
+    # identically): min == max must not divide by zero, and must not collapse every flower
+    # to an invisible speck -- every row renders at the same, full (ceiling) size instead,
+    # since there is no "smaller" group here to contrast any of them against.
+    breakdown = {
+        "Familj": {"count": 10, "value": 25.0, "aggregation": "avg"},
+        "Vän": {"count": 10, "value": 25.0, "aggregation": "avg"},
+        "Plus en": {"count": 10, "value": 25.0, "aggregation": "avg"},
+    }
+
+    geo = _bouquet_geometry_number_grouped(breakdown)
+
+    sizes = [row["flower_size"] for row in geo["rows"]]
+    assert sizes == [73, 73, 73]  # all three at this row-count's ceiling, none shrunk
+
+
+def test_bouquet_geometry_number_grouped_single_group_renders_at_the_ceiling():
+    # A single-group breakdown has no "other groups" to be relatively bigger/smaller than
+    # -- same reasoning as the equal-values case above (min == max because there is
+    # exactly one value), so this must also land on the ceiling, not the floor or some
+    # arbitrary in-between size.
+    breakdown = {"Alla": {"count": 40, "value": 99.0, "aggregation": "avg"}}
+
+    geo = _bouquet_geometry_number_grouped(breakdown)
+
+    # row_height = (852-414)/1 = 438 -> ceiling = round(min(92, max(40, 219))) = 92.
+    assert geo["rows"][0]["flower_size"] == 92
+
+
 # ---------------------------------------------------------------------------
 # screen_state() -- the actual render, including the fallback to GENERIC.
 # ---------------------------------------------------------------------------
@@ -1035,11 +1092,25 @@ def _grouped_geometries():
     }
 
 
-def test_bouquet_grouped_label_column_is_identical_across_all_three_kinds():
-    # The whole point of defining the column once in views.py: a host flipping question type
-    # at the same breakdown must see the group names stay exactly where they were.
-    columns = {kind: (geo["label_left"], geo["label_width"]) for kind, geo in _grouped_geometries().items()}
-    assert len(set(columns.values())) == 1, f"grouped label columns disagree: {columns}"
+def test_bouquet_grouped_label_column_width_is_identical_across_all_three_kinds():
+    # The label column's *width* (what the group-name text is sized/wrapped against) is still
+    # defined once in views.py and shared by all three kinds -- a host flipping question type
+    # at the same breakdown must see the group names keep the same font-wrapping behavior.
+    widths = {kind: geo["label_width"] for kind, geo in _grouped_geometries().items()}
+    assert len(set(widths.values())) == 1, f"grouped label widths disagree: {widths}"
+
+
+def test_bouquet_grouped_label_left_is_shared_by_boolean_and_multiple_choice_but_not_number():
+    # boolean_grouped/multiple_choice_grouped still share one left position (a host flipping
+    # between those two at the same breakdown sees the group names stay exactly put) --
+    # updated 2026-09-15 to no longer include number_grouped in that group: its label+cluster
+    # block needed its own centering within the frame (see _BOUQUET_NG_LABEL_LEFT's own
+    # comment for the real-pixel reasoning), which intentionally puts its label at a different
+    # x than the other two kinds now. Flipping to/from number_grouped moving the label column
+    # is the accepted trade for that centering, not a regression.
+    geos = _grouped_geometries()
+    assert geos["boolean_grouped"]["label_left"] == geos["multiple_choice_grouped"]["label_left"]
+    assert geos["number_grouped"]["label_left"] != geos["boolean_grouped"]["label_left"]
 
 
 def test_bouquet_grouped_label_zone_holds_the_widest_group_name_without_stranding_it():
@@ -1076,6 +1147,90 @@ def test_bouquet_grouped_number_cluster_does_not_move_with_the_band():
     # decoupled from the band the other two kinds fill edge to edge: dragging it left with
     # the band would only trade its right-hand void for a bigger one. Pinned so a future
     # band change doesn't silently move it -- see _BOUQUET_NG_FLOWER_LEFT's own comment.
+    #
+    # Values updated 2026-09-15 (620/750/1070 -> 860/990/1310) when the cluster was
+    # re-centered within the shared data region [440, 1780] instead of left-anchored right
+    # after the label column -- see _BOUQUET_NG_FLOWER_LEFT's own comment for the lopsided
+    # screenshot that prompted this and the centering math behind these specific numbers.
     geo = _grouped_geometries()["number_grouped"]
-    assert geo["flower_left"] == 620
-    assert geo["value_left"] == 750 and geo["tag_left"] == 1070
+    assert geo["flower_left"] == 860
+    assert geo["value_left"] == 990 and geo["tag_left"] == 1310
+
+
+# Real rendered width of a "Median" tag at this diagram's smallest tag_font_size (13px, the
+# 6-group Åldersgrupp case -- see _bouquet_grouped_label_font_sizes), measured in headless
+# Chromium against the real running app on the exact age/Median reveal Johan flagged as
+# lopsided, 2026-09-15 (see _BOUQUET_NG_LABEL_LEFT's own comment for the centering math this
+# anchors).
+_REPRESENTATIVE_NG_TAG_PX = 74.4
+
+
+def test_bouquet_geometry_number_grouped_label_left_moved_to_recenter_the_whole_block():
+    # Regression pin for _BOUQUET_NG_LABEL_LEFT's own 2026-09-15 move (140 -> 540, decoupled
+    # from the shared _BOUQUET_GROUPED_LABEL_LEFT boolean/multiple_choice_grouped still use)
+    # -- see that constant's own comment for the real-pixel centering math.
+    geo = _grouped_geometries()["number_grouped"]
+    assert geo["label_left"] == 540
+
+    # The centering claim itself, checked numerically rather than just trusted from the
+    # comment: on the representative age/Median row this constant was centered against, the
+    # whole label+cluster block (label's own left edge .. the tag's own right edge) should
+    # land close to the frame's own inner-content center (66..1854, center 960) -- "close"
+    # because this is a point estimate from one representative row shape (see
+    # _BOUQUET_NG_LABEL_LEFT's own comment), not an exact live measurement, so a few px of
+    # slack is expected and fine; tens of px would mean the constant drifted from its own
+    # stated math.
+    cluster_right_edge = geo["tag_left"] + _REPRESENTATIVE_NG_TAG_PX
+    block_center = (geo["label_left"] + cluster_right_edge) / 2
+    assert abs(block_center - 960) < 5, (
+        f"label+cluster block center ({block_center}px) has drifted from the frame's own "
+        "center (960px) by more than a few px"
+    )
+
+
+# Widest real tag text this diagram can render: "Antal över tröskel" (the
+# count_above_threshold aggregation's own display label, uppercased by .ng-tag's CSS) at
+# this diagram's biggest tag_font_size (20px, only reached at n=2 -- see
+# _bouquet_geometry_number_grouped's row_height-driven font-size formula), measured in
+# headless Chromium against this style's real 'Cormorant Garamond' face, 2026-09-15 (see
+# _BOUQUET_NG_FLOWER_LEFT's own comment for the same measurement at 13px).
+_WIDEST_NG_TAG_PX = 286
+
+
+def test_bouquet_geometry_number_grouped_widest_tag_stays_clear_of_the_frame():
+    # Companion to the label-zone check above: unlike boolean_grouped/multiple_choice_grouped
+    # (whose data band's own width is a derived constant, checked directly), number_grouped's
+    # tag sits at a fixed x with no per-render clamp -- so its worst case has to be checked
+    # against real measured text, not just trusted from the comment doing the same arithmetic
+    # by hand. 1854 is _bouquet_decor.html's inner stationery rule (x=66, width=1788).
+    breakdown = {"A": {"count": 5, "value": 1.0, "aggregation": "count_above_threshold"}, "B": {"count": 5, "value": 2.0, "aggregation": "count_above_threshold"}}
+    geo = _bouquet_geometry_number_grouped(breakdown)
+    assert geo["tag_font_size"] == 20  # confirms this really is the n=2 biggest-font case
+    assert geo["tag_left"] + _WIDEST_NG_TAG_PX < 1854
+
+
+def test_bouquet_geometry_number_grouped_widest_label_stays_clear_of_the_flower():
+    # Mirror of the widest-tag-vs-frame check above, for the OTHER end of the 2026-09-15
+    # label move: _BOUQUET_NG_LABEL_LEFT moved the label column much closer to the flower
+    # than boolean_grouped/multiple_choice_grouped's label ever sits to their own track, so
+    # the worst case that used to only matter for wrapping (this app's longest group name,
+    # "Brudgummens sida", _WIDEST_GROUP_NAME_PX=218px at the 32px name_font cap) now also has
+    # to clear the flower itself, not just its own column width. The worst-case flower is the
+    # biggest one this diagram ever draws (flower_ceiling, 92px diameter), which -- like the
+    # biggest name_font -- only happens at n=2 (see _bouquet_grouped_label_font_sizes and
+    # _bouquet_geometry_number_grouped's row_height-driven flower_ceiling formula), so this
+    # uses the same n=2 shape the widest-tag test above does.
+    breakdown = {
+        "Brudgummens sida": {"count": 5, "value": 1.0, "aggregation": "avg"},
+        "Brudens sida": {"count": 5, "value": 100.0, "aggregation": "avg"},
+    }
+    geo = _bouquet_geometry_number_grouped(breakdown)
+    assert geo["name_font_size"] == 32  # confirms this really is the n=2 biggest-font case
+    biggest_flower_size = max(row["flower_size"] for row in geo["rows"])
+    assert biggest_flower_size == 92  # confirms this really is the n=2 biggest-flower case
+    flower_left_edge = geo["flower_left"] - biggest_flower_size / 2
+    label_right_edge = geo["label_left"] + _WIDEST_GROUP_NAME_PX
+    assert label_right_edge < flower_left_edge, (
+        f"widest real group name ends at {label_right_edge}px, which does not clear the "
+        f"biggest real flower's own left edge ({flower_left_edge}px)"
+    )

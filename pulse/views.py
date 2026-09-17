@@ -415,12 +415,21 @@ def _bouquet_geometry_number(value: float, aggregation: str | None, count: int) 
 # story, including the exact bloom-size/opacity formula the multiple_choice version below
 # reverse-engineers from that mockup's own annotated SVG comments.
 #
-# All three share the same vertical row band and left-hand group-label column -- defined
-# once here rather than per-kind -- so switching which question type is revealed at, say,
-# breakdown=age always plants its rows in the same place on the stage. The horizontal *data*
-# region is shared by the two kinds that actually fill it edge to edge (boolean's track,
-# multiple_choice's stem); number_grouped's row is a small fixed-width cluster instead and
-# keeps its own left edge -- see _BOUQUET_NG_FLOWER_LEFT.
+# All three share the same vertical row band and the same left-hand label column *width*
+# (_BOUQUET_GROUPED_LABEL_WIDTH) -- defined once here rather than per-kind -- so switching
+# which question type is revealed at, say, breakdown=age always sizes the group-name text the
+# same way. The column's *left position* is also shared by boolean/multiple_choice
+# (_BOUQUET_GROUPED_LABEL_LEFT, 140) but NOT by number_grouped (_BOUQUET_NG_LABEL_LEFT, its
+# own constant, see that constant's own comment for why) -- a host flipping between boolean
+# and multiple_choice at the same breakdown sees the group names stay exactly put, but
+# flipping to/from number_grouped shifts them, which is an intentional trade for
+# number_grouped's own label+cluster block being centered on the frame like the other two
+# kinds' already are, rather than a still-unnoticed inconsistency.
+#
+# The horizontal *data* region ([_BOUQUET_GROUPED_TRACK_LEFT, +_WIDTH], i.e. x=440..1780) is
+# shared by all three kinds, but only boolean's track and multiple_choice's stem actually
+# fill it edge to edge; number_grouped's row is a small fixed-width cluster instead, centered
+# within that same region rather than filling it -- see _BOUQUET_NG_FLOWER_LEFT.
 # ---------------------------------------------------------------------------
 
 # The header above (eyebrow/headline/divider, see _bouquet.html) and the footer below
@@ -431,8 +440,13 @@ def _bouquet_geometry_number(value: float, aggregation: str | None, count: int) 
 # subline-less layout would allow, and stays well clear of the footer rule (top:872px).
 _BOUQUET_GROUPED_ROWS_TOP = 414
 _BOUQUET_GROUPED_ROWS_BOTTOM = 852
-# Left-hand "group name / N svar" column, shared by all three kinds so a host flipping
-# between question types at the same breakdown sees the group labels stay put.
+# Left-hand "group name / N svar" column. LABEL_LEFT (this constant) is shared by
+# boolean_grouped/multiple_choice_grouped only -- number_grouped uses its own
+# _BOUQUET_NG_LABEL_LEFT instead (see that constant's own comment for why: its label+cluster
+# block needs its own centering, since the cluster doesn't fill the shared data band the way
+# a track/stem does). LABEL_WIDTH below it IS still shared by all three kinds, since it's
+# governed by what the column's text can ever hold, which is the same closed set of group
+# names regardless of which kind is showing.
 #
 # LABEL_WIDTH is what the column *reserves*, and it has to be justified by what the column
 # can ever actually hold, because the group name is left-aligned inside it (see .bg-label's
@@ -650,16 +664,97 @@ def _bouquet_geometry_boolean_grouped(breakdown: dict) -> dict:
 
 # number_grouped's row content is a fixed-width cluster (flower, the one value, the
 # aggregation tag), not a band-spanning track/stem like the other two kinds -- so it is
-# deliberately NOT tied to _BOUQUET_GROUPED_TRACK_LEFT, and keeps the exact absolute
-# position it was tuned and visually verified at on 2026-09-06. Narrowing the label zone
-# (see that constant's own comment) moves the *band* left, which is right for a track that
-# fills it; dragging this cluster along with it would only trade the void it currently
-# leaves on its right for a bigger one, since the cluster's own width doesn't grow to
-# match. number_grouped's own horizontal balance (at 6 groups the cluster measures
-# x=600..1131 and then nothing until the frame at 1854) is a separate, unreported design
-# question -- see docs/screen-styles.md's session summary of 2026-09-08 -- deliberately not
-# changed here rather than redesigned as a side effect of someone else's bug fix.
-_BOUQUET_NG_FLOWER_LEFT = 620
+# deliberately NOT tied to _BOUQUET_GROUPED_TRACK_LEFT/_WIDTH the way the other two kinds'
+# data band is; a flower+number+tag cluster has no natural way to "fill" horizontal space
+# the way a track or stem row does (see the module comment above). It still needs to sit
+# *somewhere* in that same [_BOUQUET_GROUPED_TRACK_LEFT, +_WIDTH] = [440, 1780] region the
+# other two kinds' data fills, though, for the row to read as one cohesive item continuing
+# rightward from its own label.
+#
+# Moved 2026-09-15 (620 -> 860) after Johan flagged a live 6-group age-breakdown screenshot
+# as lopsided: the label+flower+value+tag content read as one coherent block, but that block
+# sat bunched in roughly the left half of the 1920px stage while the header above it was
+# properly centered. Measured on that same screenshot with the geometry this constant used
+# to produce: the cluster (flower's own left edge through the tag's own right edge, at this
+# style's real rendered widths for a "143,0"/"MEDIAN" row) spanned x=600..1144, then nothing
+# but frame decoration until the inner stationery rule at x=1854 -- a ~710px dead margin on
+# the right against a ~460px gap between the label column (ends x=400) and the cluster's own
+# left edge, i.e. roughly 1.5x more empty space on the right than the left.
+#
+# The fix centers that same cluster within the shared data region [440, 1780] instead of
+# left-anchoring it right after the label -- chosen over sliding it all the way to the
+# region's own right edge (which would just trade the whole void for an equally lopsided one
+# on the *label* side: the cluster's fixed internal spacing, see value_left/tag_left below,
+# doesn't stretch to fill whatever's left over, so pushing it further right only relocates
+# the same dead space rather than removing it). Centering keeps the gap on both sides of the
+# cluster within the region roughly even instead of concentrated on one side, which is what
+# actually reads as "intentionally composed" against the header's own centering above it.
+#
+# The centering math: using this style's real rendered widths for a representative 6-group
+# row (this style's default AVG/MEDIAN-length tag, and a 3-digit-plus-decimal value, both
+# measured in headless Chromium against the real 'Cormorant Garamond' face, 2026-09-15) the
+# cluster from the flower's own left edge to the tag's own right edge measures ~544px. Half
+# of the region's own slack ((1340 - 544) / 2 ~= 398px) goes on each side, landing the
+# flower's left edge at 440 + 398 = 838, i.e. this constant (the flower's *center*, one
+# radius -- ~20px at 6 groups -- further right) at ~858, rounded to 860. This is deliberately
+# a point estimate from one representative row shape, not a live measurement of whatever
+# text a real reveal renders (this file's "precomputed pixel, not template arithmetic"
+# convention -- see e.g. _BOUQUET_MC_NUM_GAP -- doesn't have a text-measurement primitive to
+# call at request time): a wider tag (this app's own "Antal över tröskel" aggregation label,
+# ~285px wide at this diagram's largest, 2-group tag_font_size, measured the same way) still
+# lands well clear of the frame's inner rule at 1854 with this placement (see tag_left's own
+# comment below for that check), it just isn't the exact case this constant was centered
+# against.
+_BOUQUET_NG_FLOWER_LEFT = 860
+
+# number_grouped's own left-hand label column position -- deliberately NOT
+# _BOUQUET_GROUPED_LABEL_LEFT (the constant boolean_grouped/multiple_choice_grouped both use,
+# still 140), added 2026-09-15 after Johan looked at the re-centered cluster above and said
+# the label column itself was "still so far to the left" and should move "closer to the
+# center" too.
+#
+# Measuring why: boolean_grouped/multiple_choice_grouped's label+data block is already
+# perfectly centered without any change -- label text starts at x=140 (_BOUQUET_GROUPED_
+# LABEL_LEFT) and their track/stem fills edge to edge out to x=1780
+# (_BOUQUET_GROUPED_TRACK_LEFT + _WIDTH), so that 140..1780 span's own center, (140+1780)/2 =
+# 960, already lands exactly on the frame's inner content rect's center (66..1854, center
+# 960) -- confirmed 2026-09-15 in headless Chromium against the real running app for both
+# kinds, not just by re-reading the constants. number_grouped is different: its label still
+# starts at the same x=140, but its data is the small fixed-width cluster above (not a
+# band-filling track), so the label+cluster block's own right edge is wherever the cluster's
+# tag text actually ends -- measured the same way, on the real live "uppdelat efter
+# Åldersgrupp" / MEDIAN reveal the flower_left move above was tuned against, at x=1384.4
+# (tag_left 1310 + that row's own "Median" text, 74.4px wide in this style's real face).
+# 140..1384.4's own center is (140+1384.4)/2 = 762.2 -- 198px left of the frame's own center,
+# which is exactly the leftward lopsidedness Johan flagged.
+#
+# The fix: solve for the label's own left edge that puts the WHOLE label+cluster block
+# (this constant .. that same cluster right edge, 1384.4, unchanged by this constant) on the
+# frame's center, i.e. new_label_left + 1384.4 = 2*960 -> new_label_left ~= 535.6, rounded to
+# 540 (same "nearest tidy number" rounding _BOUQUET_NG_FLOWER_LEFT's own comment used going
+# from 858 to 860 -- a couple of px of centering error is not visible against a frame this
+# size). label_width (_BOUQUET_GROUPED_LABEL_WIDTH, 260) is unchanged -- only the column's
+# position moves, not its own internal text sizing/wrapping.
+#
+# This is, like _BOUQUET_NG_FLOWER_LEFT, a point estimate from one representative row
+# (age/Median), not a live measurement of whatever a real reveal renders -- the worst-case
+# check is a label colliding with the flower rather than with the frame: at n=2 (this
+# diagram's biggest name_font, 32px, and biggest flower_ceiling, 92px diameter -- see
+# _bouquet_grouped_label_font_sizes and flower_ceiling above), this app's longest real group
+# name ("Brudgummens sida", 218px wide at 32px, measured the same way as _WIDEST_GROUP_NAME_PX
+# in test_screen_styles.py) still ends at 540 + 218 = 758, comfortably clear of that worst-case
+# flower's own left edge (_BOUQUET_NG_FLOWER_LEFT - 92/2 = 814) with 56px to spare -- see
+# test_bouquet_geometry_number_grouped_widest_label_stays_clear_of_the_flower.
+_BOUQUET_NG_LABEL_LEFT = 540
+
+# How small the smallest flower in a number_grouped view is allowed to shrink relative to
+# the biggest one, added 2026-09-15 alongside per-row relative sizing (see
+# _bouquet_geometry_number_grouped's own docstring for what this is and isn't claiming).
+# 0.5 keeps the smallest flower unmistakably a flower at #bq-blossom's own petal proportions
+# rather than a speck -- Johan's ask was "not below roughly half the ceiling", and there was
+# no sharper real-data reason to pick, say, 0.4 or 0.6 over that, so this is a judgement call
+# documented here rather than derived from anything measured.
+_BOUQUET_NG_FLOWER_MIN_RATIO = 0.5
 
 # Vertical clearance (px) kept between a bloom's own edge and the label text next to it.
 _BOUQUET_MCG_GAP = 5
@@ -822,16 +917,56 @@ def _bouquet_geometry_number_grouped(breakdown: dict) -> dict:
     idea (_bouquet_geometry_number) rather than inventing any shared scale/axis across
     groups -- NUMBER questions still have no declared min/max (see that function's
     docstring), and that's just as true per-group as it is overall, so there's still nothing
-    real to plot a bar or gauge against. The `aggregation` label is the same for every row
-    (one BigScreenState.aggregation setting applies to the whole reveal), so it's computed
-    once and returned at the top level rather than repeated per row."""
+    real to plot a bar or gauge against, and this function still doesn't invent one: there is
+    no fixed "0..N" domain painted behind the rows, no axis, no gridline, nothing that would
+    make a lone row's flower size mean anything on its own.
+
+    What changed 2026-09-15 (reported by Johan looking at a live photos-tonight-by-relation
+    reveal: 143.0/50.0/38.0/25.5/8.5/12.5 next to six visually-identical flowers, which read
+    as if the flower carried no information at all): the flower's *diameter* now scales
+    linearly between this call's own observed min and max value -- i.e. relative to the
+    other groups actually on screen in *this* reveal, not against any global/schema domain.
+    That's a meaningfully different claim than the one the docstring above still (correctly)
+    refuses to make: "38.0 is about halfway between the smallest and largest group we're
+    showing you right now" is true and visible in the printed numbers anyway, whereas "38.0
+    is bigger than any question could ever produce" would be the invented-axis claim
+    this file has always avoided. Recomputing this per-reveal (rather than, say, fixing pixel
+    sizes to specific values project-wide) also means the same value 38.0 renders at a
+    different size in a different breakdown of the same question, which is intentional --
+    the flower is answering "how does this group compare to its neighbors on screen right
+    now", not "what does 38.0 mean in the abstract" (the printed number, unchanged, still
+    answers that).
+
+    The `aggregation` label is the same for every row (one BigScreenState.aggregation
+    setting applies to the whole reveal), so it's computed once and returned at the top
+    level rather than repeated per row."""
     items = list(breakdown.items())
     n = len(items)
     row_height = (_BOUQUET_GROUPED_ROWS_BOTTOM - _BOUQUET_GROUPED_ROWS_TOP) / n
     name_font, count_font = _bouquet_grouped_label_font_sizes(row_height)
-    flower_size = round(min(92, max(40, row_height * 0.5)))
-    value_font_size = round(min(92, max(38, row_height * 0.46)))
-    tag_font_size = round(min(20, max(13, row_height * 0.09)))
+    # This is the same row_height-driven clamp the flower size has always used -- kept
+    # verbatim as the *ceiling* a row's flower can reach, so a reveal with few groups (big
+    # row_height, roomy layout) doesn't suddenly get bigger flowers than it used to just
+    # because relative sizing shipped; only the *floor* below it is new.
+    flower_ceiling = round(min(92, max(40, row_height * 0.5)))
+    # Smallest flower in the view is never smaller than _BOUQUET_NG_FLOWER_MIN_RATIO of the
+    # ceiling -- small enough to read as clearly "less than" its neighbors, but still an
+    # unambiguous flower shape at #bq-blossom's own petal proportions, not a speck that could
+    # be mistaken for a stray pixel. The extra max(20, ...) is a belt-and-braces absolute
+    # floor for a hypothetical future row_height small enough to pull flower_ceiling itself
+    # near its own 40px clamp floor (0.5 * 40 = 20 exactly today, so this never actually binds
+    # against real data -- it's here so the floor can never go *below* 20px even if the
+    # ceiling formula above or the ratio constant is ever retuned).
+    flower_floor = max(20, round(flower_ceiling * _BOUQUET_NG_FLOWER_MIN_RATIO))
+    values = [group["value"] for _, group in items]
+    value_min, value_max = min(values), max(values)
+    # Degenerate case: every group in this view landed on the exact same value (a real,
+    # if unusual, possibility -- e.g. a 2-group breakdown where both groups' average rounds
+    # identically). value_max == value_min would divide by zero below; rather than picking
+    # an arbitrary tie-break or special-casing "no scaling this time", every row just renders
+    # at the ceiling size, same as the single biggest value would in the normal case -- there
+    # is no "smaller" group to contrast against, so nothing here should read as smaller.
+    value_span = value_max - value_min
 
     rows = []
     total_count = 0
@@ -840,6 +975,15 @@ def _bouquet_geometry_number_grouped(breakdown: dict) -> dict:
         count = group["count"]
         total_count += count
         aggregation = group["aggregation"]
+        value = group["value"]
+        # Linear interpolation between this view's own observed min/max, not a sqrt/area
+        # curve like multiple_choice_grouped's bloom sizing (that diagram normalizes many
+        # options against one shared global_max_pct and cares about area reading linearly
+        # with a percentage; here there are only 2-6 flowers total and each one already has
+        # its exact value printed right next to it, so the flower only has to carry a coarse
+        # "bigger/smaller than its neighbors" cue, not a precise proportional comparison).
+        frac = (value - value_min) / value_span if value_span else 1.0
+        flower_size = round(flower_floor + (flower_ceiling - flower_floor) * frac)
         # _round_half_up, not round() -- see that helper's own docstring for why a plain
         # round() here alternately rounds row_center up/down row-to-row (banker's rounding
         # tie-breaking on an exact .5, hit whenever row_height itself is a whole number).
@@ -849,28 +993,37 @@ def _bouquet_geometry_number_grouped(breakdown: dict) -> dict:
             {
                 "label": label,
                 "count": count,
-                "value": group["value"],
+                "value": value,
                 "row_top": row_top,
                 "row_center": row_center,
+                "flower_size": flower_size,
             }
         )
     aggregation = aggregation or BigScreenState.Aggregation.AVG
+    value_font_size = round(min(92, max(38, row_height * 0.46)))
+    tag_font_size = round(min(20, max(13, row_height * 0.09)))
     return {
         "kind": "number_grouped",
         "count": total_count,
         "rows": rows,
-        "label_left": _BOUQUET_GROUPED_LABEL_LEFT,
+        "label_left": _BOUQUET_NG_LABEL_LEFT,
         "label_width": _BOUQUET_GROUPED_LABEL_WIDTH,
         "flower_left": _BOUQUET_NG_FLOWER_LEFT,
         # Fixed offsets past the flower/value, generous enough for this style's biggest
-        # possible flower (see flower_size's own clamp above) and a 3-digit-plus-decimal
-        # value at this style's biggest possible value_font_size, so they never collide
-        # regardless of which group count/aggregation actually rendered.
+        # possible flower (flower_ceiling above) and a 3-digit-plus-decimal value at this
+        # style's biggest possible value_font_size, so they never collide regardless of
+        # which group count/aggregation actually rendered, or which row got the biggest
+        # flower. Unchanged by the 2026-09-15 re-centering above (only the cluster's own
+        # start moved, not its internal shape) -- still leaves the tag clear of the frame's
+        # inner rule (x=1854) even at this diagram's widest real combination: 2 groups (this
+        # diagram's biggest tag_font_size, 20px) showing the "Antal över tröskel" aggregation
+        # (this app's longest aggregation label, ~285px wide at that size, measured in
+        # headless Chromium against the real face) -- tag_left (1310) + 285 = 1595, ~260px
+        # clear of 1854.
         "value_left": _BOUQUET_NG_FLOWER_LEFT + 130,
         "tag_left": _BOUQUET_NG_FLOWER_LEFT + 130 + 320,
         "name_font_size": name_font,
         "count_font_size": count_font,
-        "flower_size": flower_size,
         "value_font_size": value_font_size,
         "tag_font_size": tag_font_size,
         "aggregation_label": dict(BigScreenState.Aggregation.choices)[aggregation],

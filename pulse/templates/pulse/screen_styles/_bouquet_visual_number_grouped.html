@@ -8,6 +8,14 @@ reveal), but is still rendered per row rather than once for the whole diagram --
 "caption sits right next to its own number" layout the Generalization mockup used, so a row
 reads correctly in isolation without the eye having to hunt for a shared label elsewhere.
 
+The flower itself is NOT uniformly sized across rows (added 2026-09-15) -- `row.flower_size`
+is this row's own value scaled relative to the min/max actually present in this view (see
+_bouquet_geometry_number_grouped's docstring for exactly what that does and doesn't claim).
+`.ng-bloom` is centred on its own `left`/`top` via `transform: translate(-50%,-50%)` in CSS
+regardless of its `width`/`height`, so a bigger or smaller flower never needs its own anchor
+math here -- only the geometry function's per-row `flower_size` differs, the template stays
+generic.
+
 Every coordinate is page-absolute within the 1920x1080 stage (same convention as the other
 grouped partials), so `.ng-visual` sits at inset:0.
 {% endcomment %}
@@ -18,7 +26,7 @@ grouped partials), so `.ng-visual` sits at inset:0.
       <span class="ng-gcount" style="font-size:{{ bouquet.count_font_size }}px">{{ row.count }} svar</span>
     </div>
 
-    <svg class="ng-bloom" width="{{ bouquet.flower_size }}" height="{{ bouquet.flower_size }}" viewBox="-24 -24 48 48"
+    <svg class="ng-bloom" width="{{ row.flower_size }}" height="{{ row.flower_size }}" viewBox="-24 -24 48 48"
          style="left:{{ bouquet.flower_left }}px; top:{{ row.row_center }}px">
       <use href="#bq-blossom"></use>
     </svg>

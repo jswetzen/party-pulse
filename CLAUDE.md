@@ -34,3 +34,29 @@ the named volume, not in the container, so stop/rm/run doesn't lose guest data (
 `migrate` from zero). The env vars above match what the container was actually launched with —
 reconfirm with `sudo podman inspect party-pulse --format '{{json .Config.Env}}'` if they're ever
 in doubt rather than assuming this snippet stays accurate forever.
+
+## Screenshotting the live screen from `dev`
+
+`google-chrome-stable` (currently v149) is installed on this host via dotfiles-hm (added
+2026-08-29 for the separate "Claude in Chrome" extension effort — see the knowitall task for
+that), and works fine as a plain one-shot headless screenshotter, no chromedriver/Selenium/
+chromium-cli needed for this. Confirmed working 2026-09-15 against the standing local
+container above:
+
+```sh
+google-chrome-stable --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+  --window-size=1920,1080 --screenshot=/tmp/screen.png http://192.168.1.59:8000/screen/
+```
+
+`--no-sandbox` is required here — Chrome's sandbox leans on the same user-namespace
+machinery that makes rootless `podman` fail on this host (see the `newuidmap`/nosuid-`/run`
+writeup above); this wasn't independently root-caused for Chrome specifically, but the
+symptom (silent failure to launch without it) and the mechanism match closely enough that
+it's very likely the same LXC quirk, not a Chrome bug. `--headless=new` (not the older
+`--headless`) waits for the page's `load` event before writing the screenshot, which is
+enough for this app's htmx `hx-trigger="load"` fetch (`/screen/state/`) to have resolved and
+painted — no extra `sleep`/wait step needed for a single static capture. For anything beyond
+one screenshot (clicking through `screen_control.html`, waiting on a specific element,
+reading console errors) you'd want real CDP/Selenium driving instead of the bare CLI flags;
+that hasn't been set up on this host, only the one-shot `--screenshot` flag has been
+confirmed to work.

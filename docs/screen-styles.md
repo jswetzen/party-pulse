@@ -710,6 +710,136 @@ row-to-row stride confirmed, numbers clear of tracks, labels flush left). No ove
 label pairs measured in any of the real-data screenshots (`getBoundingClientRect()` on every
 `.mcg-winner-label`/`.mcg-other-label`, not eyeballed).
 
+## Session summary (2026-09-15: number_grouped flowers scale with their own row's value)
+
+Reported by Johan looking at a live number_grouped ("Ribbon Rows") reveal — photos-tonight
+by Åldersgrupp, values 143.0/50.0/38.0/25.5/8.5/12.5 — and finding it confusing that every
+row's flower rendered at the exact same size regardless of how wildly different the numbers
+next to them were. This was a deliberate original design choice, not an oversight: NUMBER
+questions have no declared min/max in the schema (age, cinnamon buns, coffee cups/day, …
+are all `type=number` with wholly different ranges), so `_bouquet_geometry_number` and its
+grouped sibling `_bouquet_geometry_number_grouped` both avoided inventing a fake domain to
+plot a bar/gauge against — see those functions' own docstrings, unchanged in that respect.
+That reasoning is still correct and still applies to *inventing a shared axis*; it was
+never a reason to also refuse a *relative* comparison using only the values already on
+screen in one reveal, which is real data, not an invented one — the request was to draw
+that distinction explicitly rather than re-litigate or quietly abandon the original
+docstrings, so both functions' docstrings now say so in as many words.
+
+**The fix** (`_bouquet_geometry_number_grouped` in `pulse/views.py`): each row's flower
+`width`/`height` (moved from a single `bouquet.flower_size` shared by every row to a
+per-row `row.flower_size`, plumbed through
+`_bouquet_visual_number_grouped.html`'s `<svg class="ng-bloom">`) now linearly interpolates
+between a floor and a ceiling pixel size, based on where that row's own value falls between
+the minimum and maximum value *actually present in this call's breakdown* — not any
+global/schema domain, and not persisted or compared across separate reveals of the same
+question. The existing `flower_size = round(min(92, max(40, row_height * 0.5)))` clamp
+(adapting to how roomy the layout is at 2 vs 6 groups) is kept verbatim as the *ceiling* —
+so a reveal with few groups doesn't suddenly get bigger flowers than it used to just because
+relative sizing shipped — and a new floor is set to half that ceiling
+(`_BOUQUET_NG_FLOWER_MIN_RATIO = 0.5`, a judgement call: "still an unmistakable flower, not
+a speck", no sharper real-data reason to pick a different ratio). The degenerate case (every
+group in the view landed on the exact same value — a real possibility, e.g. two group
+averages that round identically) is guarded explicitly: rather than dividing by a zero span,
+every row in that case renders at the ceiling size, since there's no "smaller" group to
+read any of them as smaller than. Scaling is linear on diameter, deliberately *not*
+`multiple_choice_grouped`'s sqrt/area curve (see that function's own docstring) — this
+diagram only ever has 2-6 flowers, each with its exact value already printed right next to
+it, so the flower only needs to carry a coarse "bigger/smaller than its neighbors" cue, not
+a precise proportional-area comparison; linear was simpler and there was no argument for
+copying the other diagram's curve just for consistency's own sake. Value/tag font sizes are
+unchanged (still uniform per view) — only the bloom's own size encodes relative magnitude.
+
+Added three tests to `pulse/tests/test_screen_styles.py`: the normal varied-value case
+(pinned to Johan's own reported example's shape, checking the exact interpolated pixel
+sizes so a future change to the formula has to knowingly change these numbers, not
+accidentally); the all-equal-values edge case (must render uniformly at the ceiling, not
+zero or the floor); and the single-group edge case (min == max because there's only one
+value — same reasoning, same expected ceiling size). 158 tests pass (155 existing + 3 new).
+
+Verified against the real running container (rebuilt via `sudo podman build`/`run` per this
+repo's own CLAUDE.md): `curl`'d `/screen/state/` and found it was *already* showing a live
+number_grouped reveal (Åldersgrupp breakdown) with the exact values Johan had reported
+(143.0/50.0/38.0/25.5/8.5/12.5), so no screen-state change was needed to check this. The
+served markup's `ng-bloom` widths were 40/26/24/23/20/21px against those six values in that
+same order — biggest value (143.0) at the ceiling (40px), smallest (8.5) at the floor
+(20px), everything else monotonically in between, matching the geometry function's formula
+exactly by hand-computation. **Not verified this session**: no headless-Chromium screenshot
+was taken (unlike every prior session in this file), so the *rendered* result — whether the
+size difference reads as clearly intentional at a glance, whether `.ng-value`/`.ng-tag`
+still clear a flower that's now sometimes bigger (40px) than the old fixed size, and general
+legibility across group counts other than 6 — was not visually confirmed, only the raw
+markup's geometry numbers were checked against the formula. A real screenshot pass (same
+puppeteer-core/`nix-shell -p chromium` tooling prior sessions used) would be the natural
+next step before calling this fully verified, not just numerically verified.
+
+## Session summary (2026-09-15, follow-up: number_grouped's row content was lopsided)
+
+Reported by Johan looking at a live screenshot of the same number_grouped reveal used
+above (Åldersgrupp/photos-tonight, 6 rows): the label+flower+value+tag content per row read
+as one coherent block, but that block sat bunched into roughly the left half of the
+1920px stage, leaving a large dead margin on the right that didn't match the header above
+it (which *is* centered). Confirmed by taking a fresh headless-Chromium screenshot before
+touching anything (`google-chrome-stable --headless=new ... --screenshot=/tmp/before.png
+http://192.168.1.59:8000/screen/`, per this repo's `CLAUDE.md`) — the served reveal really
+was the 6-group Åldersgrupp case, matching the report.
+
+Measured on that screenshot together with the geometry `_bouquet_geometry_number_grouped`
+produced for it: the row's own content (flower's left edge through the tag's own right
+edge, for a representative "143,0"/"MEDIAN" row) spanned x=600..1144 — then nothing but
+frame decoration until the inner stationery rule at x=1854. That's a ~710px dead margin on
+the right, against only a ~460px gap between the label column (ends x=400) and the
+cluster's own left edge — the row's content was closer to the label than to center, let
+alone balanced against the frame.
+
+This was `_BOUQUET_NG_FLOWER_LEFT` (see that constant's own module comment in
+`pulse/views.py`, added 2026-09-06): the cluster was left-anchored right after the label
+column and "kept its own left edge" by design, because — correctly — a flower+number+tag
+cluster has no natural way to *fill* horizontal space the way boolean_grouped's track or
+multiple_choice_grouped's stem row do. That reasoning for *why it's a compact cluster*
+still holds; the bug was that "compact cluster" had never actually been composed to
+balance against the frame, just parked wherever was convenient right after the label.
+
+**The fix**: centered the cluster within the same shared data region
+(`[_BOUQUET_GROUPED_TRACK_LEFT, +_WIDTH]` = x=440..1780) the other two grouped kinds' data
+already fills edge to edge, instead of left-anchoring it. Considered sliding the cluster
+all the way to the region's own right edge instead (matching boolean/multiple_choice's own
+right margin exactly), but rejected it: the cluster's internal spacing (`value_left`/
+`tag_left`, fixed offsets past `flower_left`) doesn't stretch to fill whatever's left over,
+so pushing it further right just relocates the same ~700px void to *before* the cluster
+(between the label and the flower) instead of after it — equally lopsided, mirrored. Also
+considered stretching the internal gaps themselves so the cluster's own width grew to
+nearly span the region — rejected because it visibly disconnects the value from its own
+tag (or the flower from its own label) once the gap between them gets much past what
+`_BOUQUET_NG_FLOWER_LEFT`'s original tuning already used; a number and its aggregation
+caption reading as *associated* was judged more important than closing the last ~250px of
+margin. Centering only moved `_BOUQUET_NG_FLOWER_LEFT` (620 → 860) — `value_left`/
+`tag_left`'s offsets past it (+130, +450) are untouched, so the previously-verified
+never-collide guarantee between the flower/value/tag carries over unchanged; only the
+cluster's start position changed. The centering arithmetic (cluster width ≈544px for a
+representative 6-group row, region width 1340px, half the 796px slack on each side) is
+written out in `_BOUQUET_NG_FLOWER_LEFT`'s own comment in `pulse/views.py`.
+
+Re-verified the worst-case collision math that constant's original comment made, since the
+cluster's own absolute position changed: at 2 groups (this diagram's biggest tag font,
+20px) showing the longest real aggregation label ("Antal över tröskel", the
+count_above_threshold option) — measured at ~285px wide in headless Chromium against the
+real 'Cormorant Garamond' face — the tag's right edge now lands at x≈1595, still ~260px
+clear of the frame's inner rule at x=1854. Added
+`test_bouquet_geometry_number_grouped_widest_tag_stays_clear_of_the_frame` in
+`pulse/tests/test_screen_styles.py` to pin that check against a real (offline-measured, not
+computed) pixel width, mirroring how `_WIDEST_GROUP_NAME_PX` already pins the label
+column's own worst case the same way. Also updated
+`test_bouquet_grouped_number_cluster_does_not_move_with_the_band`'s pinned
+flower/value/tag_left values (620/750/1070 → 860/990/1310).
+
+Verified against the real running container (rebuilt per this repo's `CLAUDE.md`): screenshot
+comparison at `/tmp/claude-1000/.../scratchpad/{before,after}.png`, plus spot-checks of a
+boolean_grouped and a multiple_choice_grouped reveal at the same breakdown to confirm the
+shared `_BOUQUET_GROUPED_LABEL_LEFT`/`_WIDTH`/`_BOUQUET_GROUPED_TRACK_LEFT`/`_WIDTH`
+constants (untouched by this change) still measure the same as before. Full test suite run
+after the change; see this session's own report for the pass count.
+
 ## Possible next steps
 
 Roughly in order of how self-contained each one is — none of this is started.
