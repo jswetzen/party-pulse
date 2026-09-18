@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from django.contrib.auth.models import User
 
-from pulse.models import BigScreenState, Question, Respondent, Response
+from pulse.models import BigScreenState, EventSettings, Question, Respondent, Response
 from pulse.views import (
     _bouquet_geometry_boolean,
     _bouquet_geometry_boolean_grouped,
@@ -23,6 +23,7 @@ from pulse.views import (
     _bouquet_geometry_number,
     _bouquet_geometry_number_grouped,
     _rank_podium,
+    breakdown_is_available,
     style_is_compatible,
 )
 
@@ -744,6 +745,32 @@ def test_screen_state_falls_back_to_generic_when_nobody_has_answered_yet(client)
     assert response.context["podium_rank1"] is None
     assert b"0 svar" in response.content
     assert b"style-podium" not in response.content
+
+
+def test_breakdown_is_available_reflects_event_settings():
+    enabled = EventSettings.objects.create(pk=1, side_enabled=True, relation_enabled=False)
+
+    assert breakdown_is_available(BigScreenState.Breakdown.SIDE, enabled)
+    assert not breakdown_is_available(BigScreenState.Breakdown.RELATION, enabled)
+    assert breakdown_is_available(BigScreenState.Breakdown.SEX, enabled)
+    assert breakdown_is_available(BigScreenState.Breakdown.OVERALL, enabled)
+
+
+def test_screen_state_falls_back_to_overall_when_persisted_breakdown_is_disabled(client):
+    # BigScreenState.breakdown="side" was set before the host later disabled "side" in
+    # EventSettings (e.g. switching this deployment to a non-wedding party) -- screen_state()
+    # must not keep grouping by a dimension the host console no longer even offers.
+    EventSettings.objects.create(pk=1, side_enabled=False)
+    question = make_boolean_question()
+    Response.objects.create(respondent=make_respondent(side="bride"), question=question, answer={"value": True})
+    Response.objects.create(respondent=make_respondent(side="groom"), question=question, answer={"value": False})
+    state = BigScreenState.load()
+    state.question, state.breakdown, state.style, state.revealed = question, "side", "generic", True
+    state.save()
+
+    response = client.get("/screen/state/")
+
+    assert response.context["breakdown"] == {"Alla": {"count": 2, "yes_pct": 50.0}}
 
 
 def test_screen_state_falls_back_to_generic_when_bouquet_number_has_no_answers_yet(client):

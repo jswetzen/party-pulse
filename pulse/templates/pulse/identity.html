@@ -22,6 +22,7 @@
           <option value="male">Man</option>
         </select>
       </label>
+      {% if event_settings.side_enabled %}
       <label>Sida
         <select name="side" required>
           <option value="bride">Brudens sida</option>
@@ -29,6 +30,8 @@
           <option value="both">Bådas sida</option>
         </select>
       </label>
+      {% endif %}
+      {% if event_settings.relation_enabled %}
       <label>Relation
         <select name="relation" required>
           <option value="friend">Vän</option>
@@ -36,6 +39,7 @@
           <option value="plus_one">Plus en</option>
         </select>
       </label>
+      {% endif %}
       <button type="submit">Kom igång</button>
     </form>
   </fieldset>

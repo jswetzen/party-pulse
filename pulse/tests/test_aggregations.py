@@ -1,7 +1,7 @@
 import pytest
 
 from pulse.aggregations import compute_breakdown
-from pulse.models import BigScreenState, Question, Respondent, Response, age_bucket_label
+from pulse.models import BigScreenState, EventSettings, Question, Respondent, Response, age_bucket_label
 
 pytestmark = pytest.mark.django_db
 
@@ -147,3 +147,21 @@ def test_response_unique_per_respondent_and_question():
 
     with pytest.raises(Exception):
         Response.objects.create(respondent=respondent, question=question, answer={"value": False})
+
+
+def test_age_breakdown_respects_young_old_event_setting():
+    # EventSettings.age_mode=young_old collapses the usual 6 decade buckets into exactly
+    # two groups, split at age_split_cutoff -- see EventSettings/age_bucket_label() in
+    # pulse/models.py.
+    EventSettings.objects.create(
+        pk=1, age_mode=EventSettings.AgeMode.YOUNG_OLD, age_split_cutoff=30
+    )
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    Response.objects.create(respondent=make_respondent(age=25), question=question, answer={"value": True})
+    Response.objects.create(respondent=make_respondent(age=45), question=question, answer={"value": False})
+
+    result = compute_breakdown(question, BigScreenState.Breakdown.AGE)
+
+    assert list(result.keys()) == ["Ung", "Gammal"]
+    assert result["Ung"]["yes_pct"] == 100.0
+    assert result["Gammal"]["yes_pct"] == 0.0

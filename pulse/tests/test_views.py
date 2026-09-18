@@ -4,7 +4,7 @@ import pytest
 from django.contrib.auth.models import User
 
 from pulse.aggregations import compute_breakdown
-from pulse.models import BigScreenState, Question, Respondent, Response
+from pulse.models import BigScreenState, EventSettings, Question, Respondent, Response
 from pulse.qr import render_qr_svg
 
 pytestmark = pytest.mark.django_db
@@ -28,6 +28,20 @@ def test_questionnaire_redirect_target_is_reachable(client):
     assert response.redirect_chain == [(f"/?stale={missing_id}", 302)]
 
 
+def test_event_settings_is_a_singleton():
+    # Same save()/load() pattern as BigScreenState (pulse/models.py) -- pk is always 1
+    # regardless of how many times load() is called or what gets passed to save().
+    first = EventSettings.load()
+    first.side_enabled = False
+    first.save()
+
+    second = EventSettings.load()
+
+    assert first.pk == second.pk == 1
+    assert second.side_enabled is False
+    assert EventSettings.objects.count() == 1
+
+
 def test_create_identity_creates_respondent_and_age_response(client):
     response = client.post(
         "/identities/new/",
@@ -40,6 +54,30 @@ def test_create_identity_creates_respondent_and_age_response(client):
 
     age_response = Response.objects.get(respondent=respondent, question=Question.system_age_question())
     assert age_response.answer == {"value": 42}
+
+
+def test_create_identity_succeeds_without_side_and_relation_when_disabled(client):
+    # EventSettings can turn off side/relation per event (e.g. a non-wedding party) -- see
+    # RespondentForm. Posting without them should still create a valid Respondent rather
+    # than 400ing on "this field is required".
+    EventSettings.objects.create(pk=1, side_enabled=False, relation_enabled=False)
+
+    response = client.post("/identities/new/", {"age": "42", "sex": "male"})
+
+    assert response.status_code == 200
+    respondent = Respondent.objects.get(id=response.json()["id"])
+    assert respondent.side == ""
+    assert respondent.relation == ""
+
+
+def test_create_identity_still_requires_side_and_relation_by_default(client):
+    # Default EventSettings (both enabled) preserves today's behavior -- omitting a
+    # still-required field is a form error, not a silently-accepted blank.
+    response = client.post("/identities/new/", {"age": "42", "sex": "male"})
+
+    assert response.status_code == 400
+    assert "side" in response.json()["errors"]
+    assert "relation" in response.json()["errors"]
 
 
 def test_questionnaire_excludes_system_age_question_even_without_a_response(client):
