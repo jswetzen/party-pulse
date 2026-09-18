@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 
 from .aggregations import compute_breakdown
 from .forms import RespondentForm
-from .models import BigScreenState, Question, Respondent, Response
+from .models import BigScreenState, Question, Respondent, Response, SiteSettings
 from .qr import render_qr_svg
 from .suggestions import compute_suggestions
 
@@ -123,7 +123,15 @@ def qr_sign(request):
     # guest entry point, and picks up the right scheme via SECURE_PROXY_SSL_HEADER
     # (settings.py) so the QR still encodes https:// behind the reverse proxy.
     guest_url = request.build_absolute_uri("/")
-    return render(request, "pulse/qr_sign.html", {"guest_url": guest_url, "qr_svg": render_qr_svg(guest_url)})
+    return render(
+        request,
+        "pulse/qr_sign.html",
+        {
+            "guest_url": guest_url,
+            "qr_svg": render_qr_svg(guest_url),
+            "poster_text": SiteSettings.load().qr_poster_text,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

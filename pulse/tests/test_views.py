@@ -4,7 +4,7 @@ import pytest
 from django.contrib.auth.models import User
 
 from pulse.aggregations import compute_breakdown
-from pulse.models import BigScreenState, Question, Respondent, Response
+from pulse.models import BigScreenState, Question, Respondent, Response, SiteSettings
 from pulse.qr import render_qr_svg
 
 pytestmark = pytest.mark.django_db
@@ -162,3 +162,20 @@ def test_qr_sign_encodes_the_guest_entry_url(client, settings):
     guest_url = response.context["guest_url"]
     assert guest_url == "http://party.example.com/"
     assert response.context["qr_svg"] == render_qr_svg(guest_url)
+
+
+def test_qr_sign_renders_the_configured_poster_text(client):
+    # SiteSettings.qr_poster_text is host-editable (Django admin) so the sign's copy can
+    # change per event without a code change/redeploy -- see SiteSettings in models.py.
+    SiteSettings.objects.create(pk=1, qr_poster_text="Anpassad text för den här festen.")
+
+    response = client.get("/qr/")
+
+    assert response.context["poster_text"] == "Anpassad text för den här festen."
+    assert b"Anpassad text f\xc3\xb6r den h\xc3\xa4r festen." in response.content
+
+
+def test_qr_sign_falls_back_to_the_default_poster_text_with_no_configured_row(client):
+    response = client.get("/qr/")
+
+    assert "helt anonymt" in response.context["poster_text"]

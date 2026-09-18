@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BigScreenState, Question, Respondent, Response
+from .models import BigScreenState, Question, Respondent, Response, SiteSettings
 
 # (bucket_value, display_label) pairs matching the boundaries in Respondent.age_bucket_label()
 # (pulse/models.py) -- kept as an explicit range table here rather than importing that function,
@@ -148,6 +148,16 @@ class BigScreenStateAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Singleton — only ever edit the one row created by BigScreenState.load().
         return not BigScreenState.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SiteSettings)
+class SiteSettingsAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        # Singleton — only ever edit the one row created by SiteSettings.load().
+        return not SiteSettings.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False
