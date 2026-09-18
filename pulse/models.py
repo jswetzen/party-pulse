@@ -258,3 +258,36 @@ class BigScreenState(models.Model):
 
     def __str__(self):
         return f"{self.mode} / {self.breakdown} (revealed={self.revealed})"
+
+
+class SiteSettings(models.Model):
+    """Singleton, host-editable via Django admin only (no dedicated UI) -- small bits of
+    copy that vary per event without warranting a code change/redeploy each time. Starts
+    with just the QR sign's descriptive paragraph (see pulse/views.py's qr_sign() and
+    pulse/templates/pulse/qr_sign.html); more fields can join this same singleton later if
+    other copy needs the same "editable without a deploy" treatment."""
+
+    qr_poster_text = models.TextField(
+        default=(
+            "Svara på några snabba, lite kluriga frågor om dig själv — helt anonymt, tar en minut. "
+            "Svaren blir till en bild av oss alla här, som dyker upp på storbild under kvällen."
+        ),
+        help_text="Brödtexten på QR-skylten (/qr/), under rubriken.",
+    )
+
+    class Meta:
+        verbose_name = "Site settings"
+        verbose_name_plural = "Site settings"
+
+    def save(self, *args, **kwargs):
+        # Enforce singleton: id is always 1.
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return "Site settings"
