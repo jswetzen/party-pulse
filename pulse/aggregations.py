@@ -9,7 +9,7 @@ outside `_aggregate_group`.
 import statistics
 from collections import Counter, defaultdict
 
-from .models import BigScreenState, Question, Response
+from .models import BigScreenState, EventSettings, Question, Response, age_bucket_label
 
 _BREAKDOWN_FIELD = {
     BigScreenState.Breakdown.SEX: "sex",
@@ -22,7 +22,8 @@ _BREAKDOWN_FIELD = {
 # after "60+ år" ('U' > '6' in codepoint order), which reads as nonsense on
 # the big screen. Sex/side/relation have no such ordering (their sort is purely for
 # stable, deterministic output), so this key is applied only to the AGE dimension.
-_AGE_LABEL_ORDER = {
+# Two variants since EventSettings.age_mode picks which bucket labels _group() produces.
+_AGE_LABEL_ORDER_DECADES = {
     "Under 20 år": 0,
     "20-29 år": 20,
     "30-39 år": 30,
@@ -30,15 +31,22 @@ _AGE_LABEL_ORDER = {
     "50-59 år": 50,
     "60+ år": 60,
 }
+_AGE_LABEL_ORDER_YOUNG_OLD = {"Ung": 0, "Gammal": 1}
 
 
 def compute_breakdown(question: Question, breakdown: str, aggregation: str | None = None, threshold: float | None = None):
     """Returns {group_label: aggregate_dict}, ordered by group_label (chronologically
-    for AGE, lexicographically for every other dimension -- see _AGE_LABEL_ORDER)."""
+    for AGE, lexicographically for every other dimension -- see _AGE_LABEL_ORDER_*)."""
     responses = Response.objects.filter(question=question).select_related("respondent")
-    groups = _group(responses, breakdown)
+    settings = EventSettings.load()
+    groups = _group(responses, breakdown, settings)
     if breakdown == BigScreenState.Breakdown.AGE:
-        items = sorted(groups.items(), key=lambda item: _AGE_LABEL_ORDER[item[0]])
+        age_order = (
+            _AGE_LABEL_ORDER_YOUNG_OLD
+            if settings.age_mode == EventSettings.AgeMode.YOUNG_OLD
+            else _AGE_LABEL_ORDER_DECADES
+        )
+        items = sorted(groups.items(), key=lambda item: age_order[item[0]])
     else:
         items = sorted(groups.items())
     return {
@@ -46,16 +54,18 @@ def compute_breakdown(question: Question, breakdown: str, aggregation: str | Non
     }
 
 
-def _group(responses, breakdown: str) -> dict[str, list[Response]]:
+def _group(responses, breakdown: str, settings: EventSettings) -> dict[str, list[Response]]:
     if breakdown == BigScreenState.Breakdown.OVERALL:
         return {"Alla": list(responses)}
     groups: dict[str, list[Response]] = defaultdict(list)
     if breakdown == BigScreenState.Breakdown.AGE:
         # Age has no Django `choices` to drive the generic get_<field>_display()
         # trick below — Respondent stores an exact age (see pulse/models.py), and
-        # the decade bucket is computed from it at read time instead.
+        # the bucket is computed from it at read time instead. `settings` is loaded
+        # once by the caller (compute_breakdown), not per-response, since this runs on
+        # every screen poll.
         for r in responses:
-            groups[r.respondent.age_bucket_label].append(r)
+            groups[age_bucket_label(r.respondent.age, mode=settings.age_mode, cutoff=settings.age_split_cutoff)].append(r)
         return dict(groups)
     attr = _BREAKDOWN_FIELD[breakdown]
     # Group by the Swedish display label (e.g. "Brudens sida"), not the raw

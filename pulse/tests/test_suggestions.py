@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from pulse.models import BigScreenState, Question, Respondent, Response
+from pulse.models import BigScreenState, EventSettings, Question, Respondent, Response
 from pulse.suggestions import MIN_SAMPLE_SIZE, compute_suggestions
 
 pytestmark = pytest.mark.django_db
@@ -381,6 +381,31 @@ def test_most_different_and_most_similar_are_opposite_tails_of_one_pool():
 
     assert all(s.score == pytest.approx(0.0) for s in suggestions.most_similar)
     assert all(s.breakdown != BigScreenState.Breakdown.SIDE for s in suggestions.most_similar)
+
+
+def test_disabled_breakdown_is_excluded_from_every_suggestion_list():
+    # EventSettings.side_enabled=False must stop "side" from surfacing anywhere, even
+    # though it would otherwise be the most extreme finding in this fixture -- a host who
+    # turned off "side" for a non-wedding party shouldn't see it suggested as something to
+    # reveal, since the host console's own breakdown dropdown no longer offers it either.
+    EventSettings.objects.create(pk=1, side_enabled=False)
+    question = Question.objects.create(text_sv="Har ni dansat?", type=Question.Type.BOOLEAN, status="live")
+    for _ in range(6):
+        answer(question, True, side="bride")
+    for _ in range(6):
+        answer(question, False, side="groom")
+
+    suggestions = compute_suggestions()
+
+    all_findings = (
+        suggestions.most_different
+        + suggestions.most_similar
+        + suggestions.biggest_pct_gap
+        + suggestions.most_different_pairwise
+        + suggestions.most_similar_pairwise
+        + suggestions.biggest_pct_gap_pairwise
+    )
+    assert all(s.breakdown != BigScreenState.Breakdown.SIDE for s in all_findings)
 
 
 def test_small_sample_flag_flows_through_all_three_lists():

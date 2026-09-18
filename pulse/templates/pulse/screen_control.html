@@ -36,8 +36,12 @@
           <option value="overall" {% if prefill_breakdown == "overall" %}selected{% endif %}>Alla</option>
           <option value="sex" {% if prefill_breakdown == "sex" %}selected{% endif %}>Kön</option>
           <option value="age" {% if prefill_breakdown == "age" %}selected{% endif %}>Åldersgrupp</option>
+          {% if event_settings.side_enabled %}
           <option value="side" {% if prefill_breakdown == "side" %}selected{% endif %}>Sida</option>
+          {% endif %}
+          {% if event_settings.relation_enabled %}
           <option value="relation" {% if prefill_breakdown == "relation" %}selected{% endif %}>Relation</option>
+          {% endif %}
         </select>
       </label>
       <label>Stil

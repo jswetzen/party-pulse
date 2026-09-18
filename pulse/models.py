@@ -26,6 +26,12 @@ _DECADE_LABELS = {
 _UNDER_TWENTY_LABEL = "Under 20 år"
 _SIXTY_PLUS_LABEL = "60+ år"
 
+# The two-bucket alternative to the decade buckets above (EventSettings.AgeMode.YOUNG_OLD)
+# -- for a party where "which decade" is more granularity than the host wants, e.g. a
+# non-wedding party where guests just skew into two rough cohorts.
+YOUNG_LABEL = "Ung"
+OLD_LABEL = "Gammal"
+
 # Bounds for the guest-facing exact-age input. Lower bound of 1 (not 0) because "0 years
 # old" is never a meaningful self-report at a wedding; upper bound of 119 is generous
 # headroom past any plausible guest age without being unbounded (catches fat-finger typos
@@ -34,16 +40,20 @@ AGE_MIN = 1
 AGE_MAX = 119
 
 
-def age_bucket_label(age: int) -> str:
+def age_bucket_label(age: int, *, mode: str = "decades", cutoff: int = 30) -> str:
     """Map an exact age to its Swedish age-group label, for aggregation/display (see
-    PLAN.md "Demographics"). Six buckets: "Under 20 år", "20-29 år", "30-39 år",
-    "40-49 år", "50-59 år", "60+ år".
+    PLAN.md "Demographics"). Mode defaults to the original 6-bucket decade scheme
+    ("Under 20 år", "20-29 år", "30-39 år", "40-49 år", "50-59 år", "60+ år"); passing
+    mode="young_old" (see EventSettings.AgeMode) instead splits on `cutoff` into just
+    "Ung"/"Gammal", for a host who wants a coarser breakdown than decades.
 
     Buckets below 20 have no equivalent in the old decade-dropdown scheme this replaced
     (the dropdown started at "20-talet") because self-reporting "which decade" only made
     sense once you're solidly in one; an exact age has no such gap, so we need a label
     for it anyway.
     """
+    if mode == "young_old":
+        return OLD_LABEL if age >= cutoff else YOUNG_LABEL
     if age < 20:
         return _UNDER_TWENTY_LABEL
     if age >= 60:
@@ -81,18 +91,29 @@ class Respondent(models.Model):
         ]
     )
     sex = models.CharField(max_length=8, choices=Sex.choices)
-    side = models.CharField(max_length=8, choices=Side.choices)
-    relation = models.CharField(max_length=8, choices=Relation.choices)
+    # blank=True/default="" (not null=True, the usual Django convention for an optional
+    # CharField) since EventSettings can turn either of these off per event -- a
+    # respondent created while disabled simply stores "", which get_side_display() /
+    # get_relation_display() render as "" rather than raising.
+    side = models.CharField(max_length=8, choices=Side.choices, blank=True, default="")
+    relation = models.CharField(max_length=8, choices=Relation.choices, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
     def age_bucket_label(self) -> str:
-        """Swedish age-group label for this respondent's age, e.g. "30-39 år".
-        See module-level age_bucket_label() for the bucketing rule."""
-        return age_bucket_label(self.age)
+        """Swedish age-group label for this respondent's age, e.g. "30-39 år", per the
+        event's current age-bucketing mode. See module-level age_bucket_label() for the
+        bucketing rule. Reads EventSettings fresh each call (one query) -- fine for
+        admin-table-scale usage; the hot aggregation path in aggregations.py loads
+        EventSettings once itself rather than going through this property."""
+        settings = EventSettings.load()
+        return age_bucket_label(self.age, mode=settings.age_mode, cutoff=settings.age_split_cutoff)
 
     def __str__(self):
-        return f"{self.get_side_display()} · {self.get_relation_display()} ({str(self.id)[:8]})"
+        parts = [p for p in (self.get_side_display(), self.get_relation_display()) if p]
+        label = " · ".join(parts)
+        suffix = f" ({str(self.id)[:8]})"
+        return f"{label}{suffix}" if label else f"Gäst{suffix}"
 
 
 class Question(models.Model):
@@ -258,3 +279,43 @@ class BigScreenState(models.Model):
 
     def __str__(self):
         return f"{self.mode} / {self.breakdown} (revealed={self.revealed})"
+
+
+class EventSettings(models.Model):
+    """Singleton, host-controlled (via Django admin only, no dedicated UI) -- lets a
+    single deployment be reused across different event types by toggling which
+    demographic categories are collected/offered as breakdowns. Side/relation only make
+    sense for a wedding reception (this app's original use case, see PLAN.md); a
+    non-wedding party can turn them off. Age stays a required field always (an exact
+    integer, same as ever) but its *bucketing* can be switched from the original 6
+    decade buckets to a simpler young/old split -- see age_bucket_label() above."""
+
+    class AgeMode(models.TextChoices):
+        DECADES = "decades", "Åldersgrupper (10-årsintervall)"
+        YOUNG_OLD = "young_old", "Ung/gammal"
+
+    side_enabled = models.BooleanField(default=True, verbose_name="Sida (brud/brudgum)")
+    relation_enabled = models.BooleanField(default=True, verbose_name="Relation")
+    age_mode = models.CharField(max_length=10, choices=AgeMode.choices, default=AgeMode.DECADES)
+    age_split_cutoff = models.PositiveSmallIntegerField(
+        default=30,
+        validators=[MinValueValidator(AGE_MIN), MaxValueValidator(AGE_MAX)],
+        help_text="Nedre gräns (år) för “Gammal” när Ung/gammal-läge används.",
+    )
+
+    class Meta:
+        verbose_name = "Event settings"
+        verbose_name_plural = "Event settings"
+
+    def save(self, *args, **kwargs):
+        # Enforce singleton: id is always 1.
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return "Event settings"

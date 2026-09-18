@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 
 from .aggregations import compute_breakdown
 from .forms import RespondentForm
-from .models import BigScreenState, Question, Respondent, Response
+from .models import BigScreenState, EventSettings, Question, Respondent, Response
 from .qr import render_qr_svg
 from .suggestions import compute_suggestions
 
@@ -20,12 +20,12 @@ from .suggestions import compute_suggestions
 
 
 def identity_picker(request):
-    return render(request, "pulse/identity.html")
+    return render(request, "pulse/identity.html", {"event_settings": EventSettings.load()})
 
 
 @require_POST
 def create_identity(request):
-    form = RespondentForm(request.POST)
+    form = RespondentForm(request.POST, event_settings=EventSettings.load())
     if not form.is_valid():
         return JsonResponse({"errors": form.errors}, status=400)
     # Wrapped in a transaction so a failure creating the age Response (e.g. the system
@@ -193,6 +193,7 @@ def screen_control(request):
             "prefill_question_id": prefill_question_id,
             "prefill_breakdown": prefill_breakdown,
             "suggestions": compute_suggestions(),
+            "event_settings": EventSettings.load(),
         },
     )
 
@@ -229,6 +230,19 @@ def style_is_compatible(style: str, question: Question, breakdown: str) -> bool:
     list (see docs/screen-styles.md "Possible next steps" for that still-deferred extension)."""
     if style == BigScreenState.Style.PODIUM:
         return question.type == Question.Type.MULTIPLE_CHOICE and breakdown == BigScreenState.Breakdown.OVERALL
+    return True
+
+
+def breakdown_is_available(breakdown: str, settings: EventSettings) -> bool:
+    """Whether `breakdown` is currently a real reveal option -- SEX/AGE/OVERALL always
+    are; SIDE/RELATION only if EventSettings has them enabled. Mirrors
+    style_is_compatible()'s job: screen_state() uses this to fall back to OVERALL rather
+    than reveal a dimension the host console no longer even offers, in case
+    BigScreenState.breakdown was set to SIDE/RELATION before the host later disabled it."""
+    if breakdown == BigScreenState.Breakdown.SIDE:
+        return settings.side_enabled
+    if breakdown == BigScreenState.Breakdown.RELATION:
+        return settings.relation_enabled
     return True
 
 
@@ -1032,6 +1046,13 @@ def _bouquet_geometry_number_grouped(breakdown: dict) -> dict:
 
 def screen_state(request):
     state = BigScreenState.load()
+    event_settings = EventSettings.load()
+    # Falls back to OVERALL (never persisted back to `state`, same as effective_style
+    # below) if the persisted breakdown was SIDE/RELATION and the host has since
+    # disabled that dimension in EventSettings -- see breakdown_is_available().
+    effective_breakdown = (
+        state.breakdown if breakdown_is_available(state.breakdown, event_settings) else BigScreenState.Breakdown.OVERALL
+    )
     breakdown = None
     effective_style = BigScreenState.Style.GENERIC
     podium_rank1 = podium_rank2 = podium_rank3 = None
@@ -1049,7 +1070,7 @@ def screen_state(request):
     # *shape* (right question type + breakdown) but have no actual data yet (nobody's
     # answered), which those branches detect and downgrade to GENERIC themselves, same as
     # before this change.
-    if state.question and style_is_compatible(state.style, state.question, state.breakdown):
+    if state.question and style_is_compatible(state.style, state.question, effective_breakdown):
         effective_style = state.style
 
     if effective_style == BigScreenState.Style.PODIUM:
@@ -1070,7 +1091,7 @@ def screen_state(request):
         asking_count = Response.objects.filter(question=state.question).count()
 
     elif state.revealed and state.question:
-        breakdown = compute_breakdown(state.question, state.breakdown, state.aggregation, state.aggregation_threshold)
+        breakdown = compute_breakdown(state.question, effective_breakdown, state.aggregation, state.aggregation_threshold)
 
         if effective_style == BigScreenState.Style.PODIUM:
             ranked = _rank_podium(breakdown)
@@ -1086,7 +1107,7 @@ def screen_state(request):
             else:  # nobody's answered yet -> fall back to GENERIC's "Inga svar än."
                 effective_style = BigScreenState.Style.GENERIC
         elif effective_style == BigScreenState.Style.BOUQUET:
-            if state.breakdown == BigScreenState.Breakdown.OVERALL:
+            if effective_breakdown == BigScreenState.Breakdown.OVERALL:
                 group = next(iter(breakdown.values()))
                 # Three diagram types, one per Question.Type -- see
                 # _bouquet_geometry_boolean/_multiple_choice/_number's docstrings for why

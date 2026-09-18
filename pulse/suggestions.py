@@ -70,7 +70,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from .aggregations import _group
-from .models import BigScreenState, Question, Response
+from .models import BigScreenState, EventSettings, Question, Response
 
 # A group below this size still appears in the ranked lists -- PLAN.md's anonymity model
 # ("party anonymous") trusts the host to judge live rather than silently hiding data, and
@@ -87,12 +87,17 @@ MIN_SAMPLE_SIZE = 5
 # questions, wedding-guest-list response counts) even with pairwise comparisons added.
 TOP_N = 5
 
-_BREAKDOWNS = [
-    BigScreenState.Breakdown.SEX,
-    BigScreenState.Breakdown.AGE,
-    BigScreenState.Breakdown.SIDE,
-    BigScreenState.Breakdown.RELATION,
-]
+def _active_breakdowns(settings: EventSettings) -> list[str]:
+    """Which breakdowns to scan for suggestions -- SEX/AGE are always collected, but
+    SIDE/RELATION can be turned off per event via EventSettings (see PLAN.md
+    "Demographics"), and a disabled dimension shouldn't surface "interesting" findings
+    the host console doesn't even offer as a reveal option."""
+    breakdowns = [BigScreenState.Breakdown.SEX, BigScreenState.Breakdown.AGE]
+    if settings.side_enabled:
+        breakdowns.append(BigScreenState.Breakdown.SIDE)
+    if settings.relation_enabled:
+        breakdowns.append(BigScreenState.Breakdown.RELATION)
+    return breakdowns
 
 _BREAKDOWN_LABELS = dict(BigScreenState.Breakdown.choices)
 
@@ -315,6 +320,8 @@ def _score_pools() -> dict[str, tuple[list[Suggestion], list[PairwiseSuggestion]
     pairwise support and ~345-355ms after (see PLAN.md for the full measurement), i.e.
     pairwise support adds no perceptible page-load cost at this app's scale."""
     questions = Question.objects.filter(status=Question.Status.LIVE, is_system=False)
+    settings = EventSettings.load()
+    active_breakdowns = _active_breakdowns(settings)
     vs_overall: dict[str, list[Suggestion]] = {name: [] for name in SCORING_STRATEGIES}
     pairwise: dict[str, list[PairwiseSuggestion]] = {name: [] for name in SCORING_STRATEGIES}
     for question in questions:
@@ -324,8 +331,8 @@ def _score_pools() -> dict[str, tuple[list[Suggestion], list[PairwiseSuggestion]
             continue  # nothing to meaningfully compare a single group against
         if _question_has_no_signal(question, overall_values):
             continue
-        for breakdown in _BREAKDOWNS:
-            groups = _group(responses, breakdown)
+        for breakdown in active_breakdowns:
+            groups = _group(responses, breakdown, settings)
             group_values: dict[str, list] = {}
             for group_label, group_responses in groups.items():
                 values = [r.answer["value"] for r in group_responses]

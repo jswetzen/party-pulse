@@ -1,12 +1,12 @@
 from django.contrib import admin
 
-from .models import BigScreenState, Question, Respondent, Response
+from .models import BigScreenState, EventSettings, Question, Respondent, Response
 
 # (bucket_value, display_label) pairs matching the boundaries in Respondent.age_bucket_label()
 # (pulse/models.py) -- kept as an explicit range table here rather than importing that function,
 # since a SimpleListFilter needs both the lookup value and a queryset-filterable (min, max) range
-# per bucket, not just a label.
-_AGE_BUCKET_RANGES = [
+# per bucket, not just a label. Two variants, matching EventSettings.age_mode.
+_AGE_BUCKET_RANGES_DECADES = [
     ("under_20", "Under 20 år", (None, 20)),
     ("20s", "20-29 år", (20, 30)),
     ("30s", "30-39 år", (30, 40)),
@@ -16,20 +16,29 @@ _AGE_BUCKET_RANGES = [
 ]
 
 
+def _age_bucket_ranges():
+    settings = EventSettings.load()
+    if settings.age_mode == EventSettings.AgeMode.YOUNG_OLD:
+        cutoff = settings.age_split_cutoff
+        return [("young", "Ung", (None, cutoff)), ("old", "Gammal", (cutoff, None))]
+    return _AGE_BUCKET_RANGES_DECADES
+
+
 class AgeBucketFilter(admin.SimpleListFilter):
-    # Filters on the real `age` field by the same decade boundaries age_bucket_label() uses
-    # for display -- restores the admin filtering the stale "same as before" comment promised,
-    # now that age_bucket is a computed method rather than a real field admin.list_filter can
-    # point at directly (a real field is required there; a bare method raises Django's
-    # admin.E116 check).
+    # Filters on the real `age` field by the same boundaries age_bucket_label() uses for
+    # display (decade buckets, or young/old split -- whichever EventSettings.age_mode
+    # currently selects) -- restores the admin filtering the stale "same as before" comment
+    # promised, now that age_bucket is a computed method rather than a real field
+    # admin.list_filter can point at directly (a real field is required there; a bare
+    # method raises Django's admin.E116 check).
     title = "Åldersgrupp"
     parameter_name = "age_bucket"
 
     def lookups(self, request, model_admin):
-        return [(value, label) for value, label, _ in _AGE_BUCKET_RANGES]
+        return [(value, label) for value, label, _ in _age_bucket_ranges()]
 
     def queryset(self, request, queryset):
-        for value, _, (lo, hi) in _AGE_BUCKET_RANGES:
+        for value, _, (lo, hi) in _age_bucket_ranges():
             if self.value() == value:
                 if lo is not None:
                     queryset = queryset.filter(age__gte=lo)
@@ -148,6 +157,18 @@ class BigScreenStateAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Singleton — only ever edit the one row created by BigScreenState.load().
         return not BigScreenState.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(EventSettings)
+class EventSettingsAdmin(admin.ModelAdmin):
+    list_display = ("side_enabled", "relation_enabled", "age_mode", "age_split_cutoff")
+
+    def has_add_permission(self, request):
+        # Singleton — only ever edit the one row created by EventSettings.load().
+        return not EventSettings.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False
