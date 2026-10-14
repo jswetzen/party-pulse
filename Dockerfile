@@ -1,6 +1,6 @@
 # See README.md "Containerized deployment" / PLAN.md "Hosting".
 
-FROM docker.io/library/python:3.12-alpine AS builder
+FROM docker.io/library/python:3.15-alpine AS builder
 
 RUN apk add --no-cache gcc musl-dev
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -16,7 +16,7 @@ RUN uv sync --frozen --no-dev
 # collectstatic only needs settings to import, not a real secret/DB.
 RUN DJANGO_DEBUG=1 uv run python manage.py collectstatic --noinput
 
-FROM docker.io/library/python:3.12-alpine
+FROM docker.io/library/python:3.15-alpine
 
 RUN adduser -D -u 1000 partypulse
 WORKDIR /app
